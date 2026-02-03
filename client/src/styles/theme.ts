@@ -1,0 +1,73 @@
+// 픽셀 던전 스타일 테마
+export const theme = {
+  // 색상
+  colors: {
+    // 배경
+    bgDarkest: '#0f0f1a',     // 칠흑 보라 (가장 어두운 배경)
+    bgDark: '#1a1a2e',        // 어두운 남색 (메인 배경)
+    bgMedium: '#252542',      // 중간 보라 (카드 배경)
+
+    // 강조
+    primary: '#7c3aed',       // 보라 (Primary 강조)
+    secondary: '#4f46e5',     // 인디고 (Secondary)
+    accent: '#06b6d4',        // 시안 (포인트)
+
+    // 텍스트
+    textPrimary: '#f8fafc',   // 흰색 (메인)
+    textSecondary: '#94a3b8', // 회색 (보조)
+    textGold: '#fbbf24',      // 금색 (강조 텍스트)
+
+    // 상태
+    success: '#22c55e',       // 녹색 (성공/시작)
+    danger: '#ef4444',        // 빨강 (위험/에러)
+
+    // 테두리
+    borderLight: '#a78bfa',   // 밝은 보라 (버튼 테두리)
+    borderMedium: '#4f46e5',  // 중간 보라 (입력 테두리)
+  },
+
+  // 폰트 (Noto Sans KR로 통일 - 모바일 가독성)
+  fonts: {
+    title: "'Noto Sans KR', sans-serif",
+    body: "'Noto Sans KR', sans-serif",
+  },
+
+  // 테두리 (픽셀 스타일)
+  borders: {
+    primary: '2px solid #a78bfa',
+    secondary: '2px solid #4f46e5',
+    accent: '2px solid #06b6d4',
+    card: '2px solid #4f46e5',
+    dashed: '2px dashed #4f46e5',
+  },
+} as const;
+
+// 클래스 정보 (이모지 복원 - 픽셀 게임 느낌)
+export const CLASS_INFO = {
+  warrior: {
+    name: '전사',
+    label: 'WARRIOR',
+    icon: '🗡️',
+    desc: '파티 피해 -10%'
+  },
+  mage: {
+    name: '마법사',
+    label: 'MAGE',
+    icon: '🔮',
+    desc: '광역 전투 유리'
+  },
+  cleric: {
+    name: '성직자',
+    label: 'CLERIC',
+    icon: '✨',
+    desc: '전투 후 자동 힐'
+  },
+  rogue: {
+    name: '도적',
+    label: 'ROGUE',
+    icon: '🗝️',
+    desc: '숨긴 아이템 발견'
+  },
+} as const;
+
+export type PlayerClass = keyof typeof CLASS_INFO;
