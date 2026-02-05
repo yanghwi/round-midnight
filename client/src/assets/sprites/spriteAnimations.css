@@ -1,0 +1,47 @@
+/* ==============================================
+   Enemy Sprite Animations — EarthBound style
+   steps(N) for retro feel, transform on wrapper
+   ============================================== */
+
+/* --- Idle: Bounce (raccoon) --- */
+@keyframes idle-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* --- Idle: Wobble (vending-machine) --- */
+@keyframes idle-wobble {
+  0%  { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+  100% { transform: rotate(-2deg); }
+}
+
+/* --- Idle: Float (shadow-cats, market-boss) --- */
+@keyframes idle-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-4px) rotate(-1.5deg); }
+  75%      { transform: translateY(-2px) rotate(1.5deg); }
+}
+
+/* --- Idle: Pulse (cleaning-robot) --- */
+@keyframes idle-pulse {
+  0%, 100% { transform: scaleX(1); }
+  50%      { transform: scaleX(1.06); }
+}
+
+/* --- Hit: flash white + recoil --- */
+@keyframes sprite-hit {
+  0%   { filter: brightness(1); transform: translateX(0); }
+  20%  { filter: brightness(3); transform: translateX(-4px); }
+  40%  { filter: brightness(3); transform: translateX(4px); }
+  60%  { filter: brightness(2); transform: translateX(-2px); }
+  80%  { filter: brightness(1.5); transform: translateX(0); }
+  100% { filter: brightness(1); transform: translateX(0); }
+}
+
+/* --- Defeat: shrink + fade --- */
+@keyframes sprite-defeat {
+  0%   { opacity: 1; transform: scale(1) rotate(0deg); }
+  30%  { opacity: 0.8; transform: scale(1.1) rotate(-5deg); }
+  100% { opacity: 0; transform: scale(0) rotate(30deg); }
+}

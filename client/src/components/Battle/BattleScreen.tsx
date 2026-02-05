@@ -1,4 +1,7 @@
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { EnemySprite, BattleEffects } from '../../assets';
+import type { EffectType } from '../../assets/effects/BattleEffects';
 import BattleBg from './BattleBg';
 import PartyStatus from './PartyStatus';
 import ChoiceCards from './ChoiceCards';
@@ -15,7 +18,7 @@ interface Props {
 
 /**
  * 전투 화면 — phase별 하위 컴포넌트 라우팅
- * 배경 레이어 + 스캔라인 + PartyStatus 상시 표시
+ * 배경 레이어 + 적 스프라이트 + 파티 상태 + 이펙트 오버레이
  */
 export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) {
   const phase = useGameStore((s) => s.phase);
@@ -23,9 +26,36 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
   const enemy = useGameStore((s) => s.enemy);
   const situation = useGameStore((s) => s.situation);
 
+  const [activeEffect, setActiveEffect] = useState<EffectType>(null);
+  const clearEffect = useCallback(() => setActiveEffect(null), []);
+
+  // phase 전환 시 이펙트 트리거
+  const prevPhase = useRef(phase);
+  useEffect(() => {
+    const prev = prevPhase.current;
+    if (prev === phase) return;
+    prevPhase.current = phase;
+
+    if (phase === 'narrating') {
+      // 주사위 → 내러티브: 플래시 후 흔들림
+      setActiveEffect('damage-flash');
+      const t = setTimeout(() => setActiveEffect('screen-shake'), 200);
+      return () => clearTimeout(t);
+    }
+    if (phase === 'rolling') {
+      setActiveEffect('dice-glow');
+    }
+    if (phase === 'wave_result' && enemy && enemy.hp <= 0) {
+      setActiveEffect('victory-flash');
+    }
+    if (phase === 'run_end') {
+      setActiveEffect(enemy && enemy.hp <= 0 ? 'victory-flash' : 'defeat-fade');
+    }
+  }, [phase, enemy]);
+
   return (
     <div className="flex-1 flex flex-col relative min-h-dvh">
-      <BattleBg />
+      <BattleBg waveNumber={currentWave} />
 
       {/* 컨텐츠 레이어 */}
       <div className="relative flex-1 flex flex-col" style={{ zIndex: 1 }}>
@@ -40,6 +70,11 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
             )}
           </div>
         </div>
+
+        {/* 적 스프라이트 */}
+        {enemy && (
+          <EnemySprite imageTag={enemy.imageTag} />
+        )}
 
         {/* 파티 HP */}
         <PartyStatus />
@@ -87,6 +122,9 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
           <WaveEndChoice onVote={onVote} />
         )}
       </div>
+
+      {/* 이펙트 오버레이 */}
+      <BattleEffects activeEffect={activeEffect} onAnimationEnd={clearEffect} />
     </div>
   );
 }

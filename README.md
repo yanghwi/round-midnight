@@ -25,10 +25,10 @@
 
 | 배경 | 특성 | 약점 | 보정 |
 |------|------|------|------|
-| 🛡️ 전직 경비원 | 용감한 | 어둠을 무서워함 | 물리/방어 +2/+1 |
-| 🍳 요리사 | 호기심 많은 | 거미 공포증 | 창의 행동 보정 |
-| 💻 개발자 | 겁 많은 | 사회적 상황에 약함 | 기술 행동 보정 |
-| 💼 영업사원 | 말빨 좋은 | 체력이 약함 | 사회 행동 보정 |
+| 전직 경비원 | 용감한 | 어둠을 무서워함 | 물리/방어 +2/+1 |
+| 요리사 | 호기심 많은 | 거미 공포증 | 창의 행동 보정 |
+| 개발자 | 겁 많은 | 사회적 상황에 약함 | 기술 행동 보정 |
+| 영업사원 | 말빨 좋은 | 체력이 약함 | 사회 행동 보정 |
 
 ## 주사위 시스템
 
@@ -45,7 +45,8 @@
 - **Frontend**: React + TypeScript + Tailwind CSS + Zustand
 - **Backend**: Node.js + Express + Socket.io
 - **AI**: Claude API (선택지 생성 + 전투 판정 + 내러티브)
-- **Deploy**: Vercel + Railway
+- **Deploy**: Vercel (클라이언트) + Railway (서버)
+- **CI**: GitHub Actions (타입체크 + 빌드)
 
 ## 로컬 실행
 
@@ -64,36 +65,55 @@ npm run build --workspace=@round-midnight/server
 
 ```bash
 # server/.env
-ANTHROPIC_API_KEY=your_api_key
+ANTHROPIC_API_KEY=your_api_key    # Claude API (없으면 하드코딩 폴백)
+CLIENT_URL=https://your.domain    # CORS 허용 origin (없으면 localhost)
+PORT=3000                         # 서버 포트 (Railway 자동 주입)
+
+# client/.env
+VITE_SERVER_URL=https://server.domain  # 서버 URL (없으면 localhost:3000)
 ```
 
 ## 프로젝트 구조
 
 ```
 round-midnight/
-├── client/
-│   └── src/
-│       ├── components/
-│       │   └── Lobby/          # LobbyScreen, CharacterSetup
-│       ├── hooks/useSocket.ts
-│       ├── stores/gameStore.ts # Zustand (RunPhase 기반)
-│       └── styles/theme.ts    # Tailwind 참조 + 게임 데이터
-├── server/
-│   └── src/
-│       ├── game/
-│       │   ├── Room.ts        # 방 관리 + phase 상태 머신
-│       │   └── Player.ts      # Character 생성 + 배경 적용
-│       └── socket/handlers.ts # 소켓 이벤트 핸들러
-└── shared/
-    └── types.ts               # 공유 타입 + 상수 + 소켓 이벤트
+├── client/src/
+│   ├── components/
+│   │   ├── Lobby/             # LobbyScreen, CharacterSetup
+│   │   └── Battle/            # BattleScreen, DiceRoll, NarrationBox 등 9개
+│   ├── assets/
+│   │   ├── sprites/           # box-shadow 픽셀아트 (5종)
+│   │   ├── backgrounds/       # CSS gradient 배경 (5종)
+│   │   └── effects/           # 전투 이펙트 (5종)
+│   ├── hooks/useSocket.ts
+│   ├── stores/gameStore.ts    # Zustand (RunPhase 기반)
+│   └── styles/theme.ts
+├── server/src/
+│   ├── ai/                    # LLM 연동 (5 모듈)
+│   │   ├── client.ts          # Anthropic SDK + callClaude<T>()
+│   │   ├── prompts.ts         # 시스템 프롬프트 3종
+│   │   ├── situationGenerator.ts
+│   │   ├── narrativeGenerator.ts
+│   │   └── highlightsGenerator.ts
+│   ├── game/
+│   │   ├── Room.ts            # 방 관리 + phase 상태 머신
+│   │   ├── Player.ts          # Character 생성 + 배경 적용
+│   │   ├── WaveManager.ts     # 웨이브 진행 (per-room)
+│   │   ├── DiceEngine.ts      # d20 주사위 + DC 판정
+│   │   └── DamageCalculator.ts
+│   └── socket/handlers.ts
+├── shared/types.ts            # 공유 타입 + 상수 + 소켓 이벤트
+├── Dockerfile                 # Railway 서버 배포
+├── vercel.json                # Vercel 클라이언트 배포
+└── .github/workflows/ci.yml  # CI 파이프라인
 ```
 
 ## 구현 진행 상황
 
 - [x] **Phase 1**: 프로젝트 셋업 + 로비 + 캐릭터 설정
-- [ ] **Phase 2**: 전투 코어 루프 (LLM 없이 하드코딩 데이터로)
-- [ ] **Phase 3**: LLM 연동
-- [ ] **Phase 4**: 게임 완성 + 모바일 최적화 + 배포
+- [x] **Phase 2**: 전투 코어 루프 (하드코딩 데이터)
+- [x] **Phase 3**: LLM 연동 (상황/내러티브/하이라이트 동적 생성 + 폴백)
+- [ ] **Phase 4**: 비주얼 에셋 + 배포 + 모바일 최적화
 
 ## 문서
 
