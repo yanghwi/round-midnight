@@ -113,7 +113,7 @@ export function setupSocketHandlers(io: Server) {
           // WaveManager 생성 + 첫 웨이브 시작
           const wm = new WaveManager(room.code, io);
           waveManagers.set(room.code, wm);
-          wm.startWave(gameRoom);
+          wm.startWave(gameRoom).catch((err) => console.error('[handlers] startWave 에러:', err));
         }
       }
     });

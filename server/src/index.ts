@@ -7,14 +7,24 @@ import { setupSocketHandlers } from './socket/handlers.js';
 const app = express();
 const httpServer = createServer(app);
 
+function getAllowedOrigins(): string[] {
+  const clientUrl = process.env.CLIENT_URL;
+  if (clientUrl) {
+    return clientUrl.split(',').map((url) => url.trim());
+  }
+  return ['http://localhost:5173', 'http://localhost:3000'];
+}
+
+const allowedOrigins = getAllowedOrigins();
+
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
 });
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // Health check

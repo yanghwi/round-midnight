@@ -15,10 +15,11 @@ import { rollDice, calculateBonus, determineTier } from './DiceEngine.js';
 import { calculateDamage, applyDamageToPlayers } from './DamageCalculator.js';
 import {
   WAVE_TEMPLATES,
-  scaleEnemy,
-  buildNarrative,
   NEXT_WAVE_PREVIEWS,
 } from './data/hardcodedData.js';
+import { generateSituation } from '../ai/situationGenerator.js';
+import { generateNarrative } from '../ai/narrativeGenerator.js';
+import { generateHighlights } from '../ai/highlightsGenerator.js';
 
 interface PendingChoice {
   playerId: string;
@@ -47,16 +48,15 @@ export class WaveManager {
     this.io = io;
   }
 
-  /**
-   * 웨이브 시작: 적 생성 → 선택지 배분 → wave_intro emit → 2초 후 choosing
-   */
-  startWave(room: Room): void {
-    const waveIndex = (room.run?.currentWave ?? 1) - 1;
-    const template = WAVE_TEMPLATES[Math.min(waveIndex, WAVE_TEMPLATES.length - 1)];
-    const alivePlayers = room.players.filter((p) => p.isAlive);
+  // 현재 웨이브의 상황 묘사 (내러티브 생성 시 재사용)
+  private currentSituation: string = '';
 
-    // 적 스케일링
-    this.currentEnemy = scaleEnemy(template, alivePlayers.length);
+  /**
+   * 웨이브 시작: LLM으로 상황 생성 → 선택지 배분 → wave_intro emit → 2초 후 choosing
+   */
+  async startWave(room: Room): Promise<void> {
+    const waveNumber = room.run?.currentWave ?? 1;
+    const alivePlayers = room.players.filter((p) => p.isAlive);
 
     // 상태 초기화
     this.pendingChoices.clear();
@@ -64,31 +64,28 @@ export class WaveManager {
     this.actions = [];
     this.votes.clear();
 
-    // 배경별 선택지 생성
-    this.playerChoiceSets.clear();
-    for (const player of alivePlayers) {
-      const bgChoices = template.choicesByBackground[player.background] ?? template.defaultChoices;
-      const options: ChoiceOption[] = bgChoices.map((c, i) => ({
-        id: `${player.id}-choice-${i}`,
-        text: c.text,
-        category: c.category,
-        baseDC: c.baseDC,
-      }));
-
-      const choiceSet: PlayerChoiceSet = { playerId: player.id, options };
-      this.playerChoiceSets.set(player.id, choiceSet);
-    }
-
-    // phase → wave_intro
+    // phase → wave_intro (LLM 호출 동안 로딩 표시)
     roomManager.setPhase(this.roomCode, 'wave_intro');
+    this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'wave_intro' });
+
+    // LLM 또는 폴백으로 상황/적/선택지 생성
+    const result = await generateSituation(
+      waveNumber,
+      room.run?.maxWaves ?? GAME_CONSTANTS.MAX_WAVES,
+      alivePlayers,
+    );
+
+    this.currentEnemy = result.enemy;
+    this.currentSituation = result.situation;
+    this.playerChoiceSets = result.playerChoiceSets;
 
     // 각 플레이어에게 자기만의 선택지 전송
     for (const player of alivePlayers) {
       const myChoices = this.playerChoiceSets.get(player.id);
       this.io.to(player.socketId).emit(SOCKET_EVENTS.WAVE_INTRO, {
-        waveNumber: room.run?.currentWave ?? 1,
+        waveNumber,
         enemy: this.currentEnemy,
-        situation: template.situation,
+        situation: this.currentSituation,
         playerChoices: myChoices ? [myChoices] : [],
       });
     }
@@ -168,7 +165,7 @@ export class WaveManager {
     const alivePlayers = room.players.filter((p) => p.isAlive);
     if (this.pendingRolls.size >= alivePlayers.length) {
       this.clearTimer('roll');
-      this.resolveWave(room);
+      this.resolveWave(room).catch((err) => console.error('[WaveManager] resolveWave 에러:', err));
     }
   }
 
@@ -216,7 +213,7 @@ export class WaveManager {
     }, GAME_CONSTANTS.DICE_ROLL_TIMEOUT);
   }
 
-  private resolveWave(room: Room): void {
+  private async resolveWave(room: Room): Promise<void> {
     if (!this.currentEnemy || !room.run) return;
 
     // 1. 데미지 계산
@@ -230,26 +227,29 @@ export class WaveManager {
     const updatedPlayers = applyDamageToPlayers(room.players, damageResult);
     roomManager.updatePlayers(this.roomCode, updatedPlayers);
 
-    // 4. 내러티브 생성
-    const narrative = buildNarrative(this.actions, this.currentEnemy.name, damageResult.enemyDefeated);
-
-    // 5. ROLL_RESULTS emit → narrating
+    // 4. ROLL_RESULTS emit → narrating (내러티브 생성 동안 주사위 결과 먼저 표시)
     roomManager.setPhase(this.roomCode, 'narrating');
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.ROLL_RESULTS, { actions: this.actions });
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'narrating' });
 
-    // 6. 2초 후 WAVE_NARRATIVE emit
-    setTimeout(() => {
-      this.io.to(this.roomCode).emit(SOCKET_EVENTS.WAVE_NARRATIVE, {
-        narrative,
-        damageResult,
-      });
+    // 5. LLM 내러티브 생성 + 2초 딜레이 병렬 실행
+    const [narrative] = await Promise.all([
+      generateNarrative(
+        this.currentSituation, this.currentEnemy.name, this.actions, damageResult.enemyDefeated,
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+    ]);
 
-      // 7. 3초 후 WAVE_END → wave_result
-      setTimeout(() => {
-        this.emitWaveEnd(room, damageResult);
-      }, 3000);
-    }, 2000);
+    // 6. WAVE_NARRATIVE emit
+    this.io.to(this.roomCode).emit(SOCKET_EVENTS.WAVE_NARRATIVE, {
+      narrative,
+      damageResult,
+    });
+
+    // 7. 3초 후 WAVE_END → wave_result
+    setTimeout(() => {
+      this.emitWaveEnd(room, damageResult);
+    }, 3000);
   }
 
   private emitWaveEnd(room: Room, damageResult: import('@round-midnight/shared').DamageResult): void {
@@ -265,13 +265,13 @@ export class WaveManager {
 
     // 전멸 → 바로 run_end
     if (allDead) {
-      this.endRun(refreshedRoom, 'wipe');
+      this.endRun(refreshedRoom, 'wipe').catch((err) => console.error('[WaveManager] endRun 에러:', err));
       return;
     }
 
     // 클리어 (마지막 웨이브 + 적 격파)
     if (isLastWave && damageResult.enemyDefeated) {
-      this.endRun(refreshedRoom, 'clear');
+      this.endRun(refreshedRoom, 'clear').catch((err) => console.error('[WaveManager] endRun 에러:', err));
       return;
     }
 
@@ -322,45 +322,37 @@ export class WaveManager {
     const majority = retreatCount > total / 2; // 과반수 철수 시 철수, 동률은 계속
 
     if (majority) {
-      this.endRun(refreshedRoom, 'retreat');
+      this.endRun(refreshedRoom, 'retreat').catch((err) => console.error('[WaveManager] endRun 에러:', err));
     } else {
       // 적이 살아있으면 같은 웨이브 다시, 죽었으면 다음 웨이브
       if (this.currentEnemy && this.currentEnemy.hp > 0) {
-        // 같은 웨이브 재시도
-        this.startWave(refreshedRoom);
+        this.startWave(refreshedRoom).catch((err) => console.error('[WaveManager] startWave 에러:', err));
       } else {
-        // 다음 웨이브
         const runState = roomManager.advanceWave(this.roomCode);
         if (runState) {
-          this.startWave(roomManager.getRoom(this.roomCode)!);
+          this.startWave(roomManager.getRoom(this.roomCode)!).catch((err) => console.error('[WaveManager] startWave 에러:', err));
         }
       }
     }
   }
 
-  private endRun(room: Room, result: 'retreat' | 'wipe' | 'clear'): void {
+  private async endRun(room: Room, result: 'retreat' | 'wipe' | 'clear'): Promise<void> {
+    const waveCount = room.run?.currentWave ?? 1;
+    const players = room.players;
     roomManager.endRun(this.roomCode);
+
+    const highlights = await generateHighlights(result, players, waveCount);
 
     const payload: RunEndPayload = {
       result,
       totalLoot: room.run?.accumulatedLoot ?? [],
-      highlights: this.generateHighlights(result),
+      highlights,
       waveHistory: room.run?.waveHistory ?? [],
     };
 
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.RUN_END, payload);
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'run_end' });
     this.cleanup();
-  }
-
-  private generateHighlights(result: 'retreat' | 'wipe' | 'clear'): string[] {
-    if (result === 'clear') {
-      return ['야시장의 주인을 물리쳤다!', '모두 무사히 살아남았다.', '오늘 밤은 승리의 야식이다!'];
-    }
-    if (result === 'retreat') {
-      return ['현명한 후퇴도 용기다.', '다음에는 더 강해져서 돌아오자.', '적어도 살아남았으니까.'];
-    }
-    return ['모두 쓰러졌다...', '야시장의 어둠이 모든 것을 삼켰다.', '다음엔... 더 잘할 수 있을 거야.'];
   }
 
   // ── 타임아웃 자동 처리 ──

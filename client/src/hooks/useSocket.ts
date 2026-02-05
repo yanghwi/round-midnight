@@ -16,7 +16,7 @@ import type {
 } from '@round-midnight/shared';
 import { SOCKET_EVENTS } from '@round-midnight/shared';
 
-const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3000' : '';
+const SOCKET_URL = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? 'http://localhost:3000' : '');
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
