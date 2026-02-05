@@ -1,5 +1,5 @@
 {
-  "name": "@daily-dungeon/server",
+  "name": "@round-midnight/server",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.25.0",
-    "@daily-dungeon/shared": "*",
+    "@round-midnight/shared": "*",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "socket.io": "^4.7.4",

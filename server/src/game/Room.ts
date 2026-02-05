@@ -1,5 +1,5 @@
-import type { Room, Player, VoteState, VoteChoice, RunState } from '@daily-dungeon/shared';
-import { GAME_CONSTANTS } from '@daily-dungeon/shared';
+import type { Room, Character, RunState, RunPhase } from '@round-midnight/shared';
+import { GAME_CONSTANTS } from '@round-midnight/shared';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -14,7 +14,7 @@ function generateRoomCode(): string {
 export class RoomManager {
   private rooms: Map<string, Room> = new Map();
 
-  createRoom(host: Player): Room {
+  createRoom(host: Character): Room {
     let code: string;
     do {
       code = generateRoomCode();
@@ -23,10 +23,9 @@ export class RoomManager {
     const room: Room = {
       code,
       players: [host],
-      state: 'waiting',
       hostId: host.id,
       run: null,
-      vote: null,
+      phase: 'waiting',
     };
 
     this.rooms.set(code, room);
@@ -37,10 +36,10 @@ export class RoomManager {
     return this.rooms.get(code.toUpperCase());
   }
 
-  joinRoom(code: string, player: Player): Room | null {
+  joinRoom(code: string, player: Character): Room | null {
     const room = this.getRoom(code);
     if (!room) return null;
-    if (room.state !== 'waiting') return null;
+    if (room.phase !== 'waiting') return null;
     if (room.players.length >= GAME_CONSTANTS.MAX_PLAYERS) return null;
 
     room.players.push(player);
@@ -51,7 +50,7 @@ export class RoomManager {
     const room = this.getRoom(code);
     if (!room) return null;
 
-    room.players = room.players.filter((p: Player) => p.id !== playerId);
+    room.players = room.players.filter((p) => p.id !== playerId);
 
     if (room.players.length === 0) {
       this.rooms.delete(code);
@@ -66,23 +65,78 @@ export class RoomManager {
     return room;
   }
 
-  startGame(code: string, playerId: string): Room | null {
+  /**
+   * 캐릭터 설정 단계로 전환
+   */
+  startCharacterSetup(code: string, playerId: string): Room | null {
     const room = this.getRoom(code);
     if (!room) return null;
     if (room.hostId !== playerId) return null;
     if (room.players.length < GAME_CONSTANTS.MIN_PLAYERS) return null;
-    if (room.state !== 'waiting') return null;
+    if (room.phase !== 'waiting') return null;
 
-    room.state = 'playing';
+    room.phase = 'character_setup';
+    return room;
+  }
 
-    // 런 상태 초기화 (10웨이브)
+  /**
+   * 캐릭터 설정 완료 확인
+   */
+  isAllCharactersReady(code: string): boolean {
+    const room = this.getRoom(code);
+    if (!room) return false;
+    return room.players.every((p) => p.background !== '');
+  }
+
+  /**
+   * 캐릭터 업데이트
+   */
+  updateCharacter(code: string, character: Character): Room | null {
+    const room = this.getRoom(code);
+    if (!room) return null;
+
+    const idx = room.players.findIndex((p) => p.id === character.id);
+    if (idx !== -1) {
+      room.players[idx] = character;
+    }
+    return room;
+  }
+
+  /**
+   * 게임 시작 (캐릭터 설정 완료 후)
+   */
+  startGame(code: string): Room | null {
+    const room = this.getRoom(code);
+    if (!room) return null;
+    if (room.phase !== 'character_setup') return null;
+    if (!this.isAllCharactersReady(code)) return null;
+
+    room.phase = 'wave_intro';
+
     room.run = {
+      roomCode: code,
+      players: [...room.players],
       currentWave: 1,
-      maxWaves: GAME_CONSTANTS.FULL_MAX_WAVES,
-      accumulatedRewards: [],
+      maxWaves: GAME_CONSTANTS.MAX_WAVES,
+      enemy: null,
+      accumulatedLoot: [],
+      phase: 'wave_intro',
+      waveHistory: [],
     };
 
     return room;
+  }
+
+  /**
+   * 방 phase 변경
+   */
+  setPhase(code: string, phase: RunPhase): void {
+    const room = this.getRoom(code);
+    if (!room) return;
+    room.phase = phase;
+    if (room.run) {
+      room.run.phase = phase;
+    }
   }
 
   /**
@@ -93,74 +147,16 @@ export class RoomManager {
     if (!room || !room.run) return null;
 
     room.run.currentWave += 1;
-    room.vote = null; // 투표 초기화
+    room.phase = 'wave_intro';
+    room.run.phase = 'wave_intro';
 
     return room.run;
   }
 
   /**
-   * 투표 시작
-   */
-  startVote(code: string): VoteState | null {
-    const room = this.getRoom(code);
-    if (!room) return null;
-
-    const alivePlayers = room.players.filter((p) => p.isAlive);
-
-    room.vote = {
-      votes: {},
-      totalPlayers: alivePlayers.length,
-      deadline: Date.now() + GAME_CONSTANTS.VOTE_TIMEOUT,
-    };
-
-    return room.vote;
-  }
-
-  /**
-   * 투표 제출
-   */
-  submitVote(code: string, playerId: string, choice: VoteChoice): VoteState | null {
-    const room = this.getRoom(code);
-    if (!room || !room.vote) return null;
-
-    room.vote.votes[playerId] = choice;
-    return room.vote;
-  }
-
-  /**
-   * 투표 결과 계산
-   * 과반수가 'continue' 선택 시 진행, 그 외(동점 포함)는 'retreat'
-   */
-  getVoteResult(code: string): VoteChoice | null {
-    const room = this.getRoom(code);
-    if (!room || !room.vote) return null;
-
-    const votes = Object.values(room.vote.votes);
-    const continueCount = votes.filter((v) => v === 'continue').length;
-    const retreatCount = votes.filter((v) => v === 'retreat').length;
-
-    // 모든 생존 플레이어가 투표했는지 확인
-    if (votes.length < room.vote.totalPlayers) return null;
-
-    // 과반수 판정
-    return continueCount > retreatCount ? 'continue' : 'retreat';
-  }
-
-  /**
-   * 런 종료
-   */
-  endRun(code: string, escaped: boolean): void {
-    const room = this.getRoom(code);
-    if (!room) return;
-
-    room.state = 'finished';
-    room.vote = null;
-  }
-
-  /**
    * 플레이어 상태 업데이트
    */
-  updatePlayers(code: string, updatedPlayers: Player[]): void {
+  updatePlayers(code: string, updatedPlayers: Character[]): void {
     const room = this.getRoom(code);
     if (!room) return;
 
@@ -170,11 +166,14 @@ export class RoomManager {
         room.players[idx] = updated;
       }
     }
+    if (room.run) {
+      room.run.players = [...room.players];
+    }
   }
 
   getPlayerRoom(socketId: string): Room | undefined {
     for (const room of this.rooms.values()) {
-      if (room.players.some((p: Player) => p.socketId === socketId)) {
+      if (room.players.some((p) => p.socketId === socketId)) {
         return room;
       }
     }
@@ -183,13 +182,25 @@ export class RoomManager {
 
   removePlayerBySocketId(socketId: string): { room: Room; playerId: string } | null {
     for (const room of this.rooms.values()) {
-      const player = room.players.find((p: Player) => p.socketId === socketId);
+      const player = room.players.find((p) => p.socketId === socketId);
       if (player) {
         const result = this.leaveRoom(room.code, player.id);
         return result ? { room: result, playerId: player.id } : null;
       }
     }
     return null;
+  }
+
+  /**
+   * 런 종료
+   */
+  endRun(code: string): void {
+    const room = this.getRoom(code);
+    if (!room) return;
+    room.phase = 'run_end';
+    if (room.run) {
+      room.run.phase = 'run_end';
+    }
   }
 }
 

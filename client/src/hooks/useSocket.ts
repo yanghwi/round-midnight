@@ -5,20 +5,9 @@ import type {
   RoomCreatedResponse,
   RoomJoinedResponse,
   Room,
-  Player,
-  GameStartedResponse,
-  CombatResultResponse,
-  VoteUpdateResponse,
-  RunEndPayload,
-  PlayerDiedResponse,
-  Wave,
-  RunState,
-  VoteChoice,
-  VoteState,
-  ChoicesGeneratedResponse,
-  ActionVoteUpdateResponse,
-  DiceRolledResponse,
-} from '@daily-dungeon/shared';
+  Character,
+} from '@round-midnight/shared';
+import { SOCKET_EVENTS } from '@round-midnight/shared';
 
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
@@ -29,24 +18,8 @@ export function useSocket() {
     setRoom,
     setConnected,
     setError,
-    setGameState,
-    setCurrentWave,
-    setNarration,
-    setWaitingForChoice,
-    setProcessing,
-    setCombatOutcome,
-    setLatestDrops,
-    setRun,
-    setVote,
-    setMyVote,
-    updatePlayers,
-    setBattle,
+    setPhase,
     resetGame,
-    setChoices,
-    setActionVotes,
-    setDiceRoll,
-    setChoiceState,
-    setMyAction,
   } = useGameStore();
 
   useEffect(() => {
@@ -66,149 +39,59 @@ export function useSocket() {
       setConnected(false);
     });
 
-    // 방 생성 응답
-    socket.on('room-created', (data: RoomCreatedResponse) => {
+    // ===== 로비 =====
+
+    socket.on(SOCKET_EVENTS.ROOM_CREATED, (data: RoomCreatedResponse) => {
       setPlayer(data.player);
       setRoom({
         code: data.roomCode,
         players: [data.player],
-        state: 'waiting',
         hostId: data.player.id,
         run: null,
-        vote: null,
+        phase: 'waiting',
       });
-      setGameState('lobby');
+      setPhase('waiting');
     });
 
-    // 방 참가 응답
-    socket.on('room-joined', (data: RoomJoinedResponse) => {
+    socket.on(SOCKET_EVENTS.ROOM_JOINED, (data: RoomJoinedResponse) => {
       setPlayer(data.player);
       setRoom(data.room);
-      setGameState('lobby');
+      setPhase('waiting');
     });
 
-    // 새 플레이어 참가
-    socket.on('player-joined', (data: { player: Player; room: Room }) => {
+    socket.on(SOCKET_EVENTS.PLAYER_JOINED, (data: { player: Character; room: Room }) => {
       setRoom(data.room);
     });
 
-    // 플레이어 퇴장
-    socket.on('player-left', (data: { playerId: string; room: Room }) => {
+    socket.on(SOCKET_EVENTS.PLAYER_LEFT, (data: { playerId: string; room: Room }) => {
       setRoom(data.room);
     });
 
-    // 게임 시작
-    socket.on('game-started', (data: GameStartedResponse) => {
-      console.log('[game-started]', data);
-      setRoom((prevRoom) =>
-        prevRoom
-          ? {
-              ...prevRoom,
-              state: 'playing',
-              players: data.players,
-              run: data.run,
-            }
-          : null
-      );
-      setRun(data.run);
-      setCurrentWave(data.wave);
-      setBattle({ maxWaves: data.run.maxWaves });
-      setGameState('playing');
+    // ===== 캐릭터 설정 =====
+
+    socket.on(SOCKET_EVENTS.GAME_STARTED, (data: { room: Room }) => {
+      setRoom(data.room);
+      setPhase('character_setup');
     });
 
-    // 선택지 생성 완료 (새로운 전투 시스템)
-    socket.on('choices-generated', (data: ChoicesGeneratedResponse) => {
-      console.log('[choices-generated]', data.actions);
-      setChoices(data.actions, data.deadline);
-      setGameState('choosing');
-    });
-
-    // 행동 선택 투표 현황
-    socket.on('action-vote-update', (data: ActionVoteUpdateResponse) => {
-      console.log('[action-vote-update]', data);
-      setActionVotes(data.votes);
-    });
-
-    // 주사위 결과
-    socket.on('dice-rolled', (data: DiceRolledResponse) => {
-      console.log('[dice-rolled]', data.diceRoll.value, data.selectedAction.name);
-      setDiceRoll(data.diceRoll, data.selectedAction);
-      setGameState('rolling');
-    });
-
-    // 전투 결과
-    socket.on('combat-result', (data: CombatResultResponse) => {
-      console.log('[combat-result]', data.outcome.result);
-      setCombatOutcome(data.outcome);
-      setNarration(data.outcome.description);
-      updatePlayers(data.updatedPlayers);
-      setRun(data.run);
-      setProcessing(false);
-      setChoiceState(null);
-      setGameState('playing');
-
-      // 드롭 아이템 저장
-      if (data.outcome.drops && data.outcome.drops.length > 0) {
-        setLatestDrops(data.outcome.drops);
-      } else {
-        setLatestDrops([]);
+    socket.on(SOCKET_EVENTS.CHARACTER_READY, (data: { player: Character; room: Room }) => {
+      setRoom(data.room);
+      // 자기 자신의 캐릭터가 업데이트된 경우
+      const store = useGameStore.getState();
+      if (store.player?.id === data.player.id) {
+        setPlayer(data.player);
       }
     });
 
-    // 웨이브 시작
-    socket.on('wave-start', (data: { wave: Wave; run: RunState }) => {
-      console.log('[wave-start]', data.wave.waveNumber);
-      setCurrentWave(data.wave);
-      setRun(data.run);
-      setVote(null);
-      setMyVote(null);
-      setCombatOutcome(null);
-      setLatestDrops([]);
-      setChoiceState(null);
-      setMyAction('');
-      setGameState('playing');
+    socket.on(SOCKET_EVENTS.ALL_CHARACTERS_READY, (data: { room: Room }) => {
+      setRoom(data.room);
+      setPhase('wave_intro');
+      // Phase 2에서 wave-intro 이벤트 처리 추가
     });
 
-    // 투표 시작
-    socket.on('vote-start', (data: { votes: VoteState }) => {
-      console.log('[vote-start]');
-      setVote(data.votes);
-      setWaitingForChoice(true);
-      setGameState('voting');
-    });
+    // ===== 에러 =====
 
-    // 투표 업데이트
-    socket.on('vote-update', (data: VoteUpdateResponse) => {
-      console.log('[vote-update]', data);
-      setVote(data.votes);
-
-      if (data.result) {
-        // 투표 완료
-        setWaitingForChoice(false);
-      }
-    });
-
-    // 런 종료
-    socket.on('run-end', (data: RunEndPayload) => {
-      console.log('[run-end]', data);
-      setGameState('result');
-    });
-
-    // 플레이어 사망
-    socket.on('player-died', (data: PlayerDiedResponse) => {
-      console.log('[player-died]', data.playerName);
-    });
-
-    // 에러 처리
-    socket.on('join-error', (data: { message: string }) => {
-      setError(data.message);
-    });
-
-    socket.on('start-error', (data: { message: string }) => {
-      setError(data.message);
-    });
-
-    socket.on('choices-error', (data: { message: string }) => {
+    socket.on(SOCKET_EVENTS.ERROR, (data: { message: string }) => {
       setError(data.message);
     });
 
@@ -217,48 +100,27 @@ export function useSocket() {
     };
   }, []);
 
+  // ===== Emitters =====
+
   const createRoom = (playerName: string) => {
-    socketRef.current?.emit('create-room', { playerName });
+    socketRef.current?.emit(SOCKET_EVENTS.CREATE_ROOM, { playerName });
   };
 
   const joinRoom = (roomCode: string, playerName: string) => {
-    socketRef.current?.emit('join-room', { roomCode, playerName });
+    socketRef.current?.emit(SOCKET_EVENTS.JOIN_ROOM, { roomCode, playerName });
   };
 
   const startGame = () => {
-    console.log('[startGame] Called');
-    socketRef.current?.emit('start-game');
+    socketRef.current?.emit(SOCKET_EVENTS.START_GAME);
   };
 
   const leaveRoom = () => {
-    socketRef.current?.emit('leave-room');
+    socketRef.current?.emit(SOCKET_EVENTS.LEAVE_ROOM);
     resetGame();
   };
 
-  // 선택지 요청 (새로운 전투 시스템)
-  const requestChoices = () => {
-    console.log('[requestChoices] Called');
-    setProcessing(true);
-    socketRef.current?.emit('request-choices');
-  };
-
-  // 행동 선택
-  const selectAction = (actionId: string) => {
-    console.log('[selectAction]', actionId);
-    setMyAction(actionId);
-    socketRef.current?.emit('select-action', { actionId });
-  };
-
-  // 기존 attack (하위 호환성)
-  const attack = () => {
-    console.log('[attack] Redirecting to requestChoices');
-    requestChoices();
-  };
-
-  const submitVote = (choice: VoteChoice) => {
-    console.log('[submitVote]', choice);
-    setMyVote(choice);
-    socketRef.current?.emit('player-vote', { choice });
+  const submitCharacterSetup = (name: string, background: string) => {
+    socketRef.current?.emit(SOCKET_EVENTS.CHARACTER_SETUP, { name, background });
   };
 
   return {
@@ -267,9 +129,6 @@ export function useSocket() {
     joinRoom,
     startGame,
     leaveRoom,
-    attack,
-    requestChoices,
-    selectAction,
-    submitVote,
+    submitCharacterSetup,
   };
 }

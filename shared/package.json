@@ -1,11 +1,10 @@
 {
-  "name": "@daily-dungeon/shared",
+  "name": "@round-midnight/shared",
   "version": "1.0.0",
   "type": "module",
   "main": "types.ts",
   "types": "types.ts",
   "exports": {
-    ".": "./types.ts",
-    "./dungeonGenerator": "./dungeonGenerator.ts"
+    ".": "./types.ts"
   }
 }

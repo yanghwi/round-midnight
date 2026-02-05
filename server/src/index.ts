@@ -18,8 +18,8 @@ app.use(cors());
 app.use(express.json());
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', game: 'Round Midnight' });
 });
 
 // Socket.io 핸들러 설정
@@ -28,5 +28,5 @@ setupSocketHandlers(io);
 const PORT = process.env.PORT || 3000;
 
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Round Midnight server running on port ${PORT}`);
 });

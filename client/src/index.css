@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 기본 스타일 */
+body {
+  @apply bg-midnight-800 text-slate-100 font-sans m-0 p-0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 모바일 터치 최적화 */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  /* 세로 화면 고정 */
+  overflow-x: hidden;
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 스크롤바 숨기기 (모바일 게임 UI) */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* 안전 영역 (아이폰 노치) */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

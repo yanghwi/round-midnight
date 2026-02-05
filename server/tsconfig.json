@@ -10,8 +10,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@daily-dungeon/shared": ["../shared/types.ts"],
-      "@daily-dungeon/shared/*": ["../shared/*"]
+      "@round-midnight/shared": ["../shared/types.ts"],
+      "@round-midnight/shared/*": ["../shared/*"]
     },
     "baseUrl": "."
   },

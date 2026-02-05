@@ -1,80 +1,82 @@
-// 픽셀 던전 스타일 테마
-export const theme = {
-  // 색상
-  colors: {
-    // 배경
-    bgDarkest: '#0f0f1a',     // 칠흑 보라 (가장 어두운 배경)
-    bgDark: '#1a1a2e',        // 어두운 남색 (메인 배경)
-    bgMedium: '#252542',      // 중간 보라 (카드 배경)
+// Tailwind 커스텀 테마 값 참조용
+// tailwind.config.js에 정의된 색상을 JS에서 사용할 때 참조
 
-    // 강조
-    primary: '#7c3aed',       // 보라 (Primary 강조)
-    secondary: '#4f46e5',     // 인디고 (Secondary)
-    accent: '#06b6d4',        // 시안 (포인트)
+export const tierColors: Record<string, string> = {
+  nat20: 'text-tier-nat20',
+  critical: 'text-tier-critical',
+  normal: 'text-tier-normal',
+  fail: 'text-tier-fail',
+  nat1: 'text-tier-nat1',
+};
 
-    // 텍스트
-    textPrimary: '#f8fafc',   // 흰색 (메인)
-    textSecondary: '#94a3b8', // 회색 (보조)
-    textGold: '#fbbf24',      // 금색 (강조 텍스트)
+export const tierBgColors: Record<string, string> = {
+  nat20: 'bg-tier-nat20',
+  critical: 'bg-tier-critical',
+  normal: 'bg-tier-normal',
+  fail: 'bg-tier-fail',
+  nat1: 'bg-tier-nat1',
+};
 
-    // 상태
-    success: '#22c55e',       // 녹색 (성공/시작)
-    danger: '#ef4444',        // 빨강 (위험/에러)
+export const tierLabels: Record<string, string> = {
+  nat20: 'NAT 20!',
+  critical: '크리티컬',
+  normal: '성공',
+  fail: '실패',
+  nat1: 'NAT 1...',
+};
 
-    // 테두리
-    borderLight: '#a78bfa',   // 밝은 보라 (버튼 테두리)
-    borderMedium: '#4f46e5',  // 중간 보라 (입력 테두리)
+// 배경 선택지 데이터
+export const BACKGROUNDS = [
+  {
+    id: 'guard',
+    label: '전직 경비원',
+    trait: '용감한',
+    weakness: '어둠을 무서워함',
+    weapon: '알루미늄 배트',
+    armor: '두꺼운 패딩',
+    accessory: '행운의 열쇠고리',
+    weaponBonus: 2,
+    armorBonus: 1,
+    emoji: '🛡️',
+    description: '물리/방어 행동에 보정',
   },
-
-  // 전투 결과별 색상
-  combatResults: {
-    perfect: {
-      bg: 'rgba(6, 78, 59, 0.95)',      // emerald-900
-      border: '#34d399',                 // emerald-400
-      text: '#a7f3d0',                   // emerald-200
-    },
-    victory: {
-      bg: 'rgba(20, 83, 45, 0.95)',     // green-900
-      border: '#4ade80',                 // green-400
-      text: '#bbf7d0',                   // green-200
-    },
-    narrow: {
-      bg: 'rgba(113, 63, 18, 0.95)',    // yellow-900
-      border: '#facc15',                 // yellow-400
-      text: '#fef08a',                   // yellow-200
-    },
-    defeat: {
-      bg: 'rgba(124, 45, 18, 0.95)',    // orange-900
-      border: '#fb923c',                 // orange-400
-      text: '#fed7aa',                   // orange-200
-    },
-    wipe: {
-      bg: 'rgba(127, 29, 29, 0.95)',    // red-900
-      border: '#f87171',                 // red-400
-      text: '#fecaca',                   // red-200
-    },
+  {
+    id: 'chef',
+    label: '요리사',
+    trait: '호기심 많은',
+    weakness: '거미 공포증',
+    weapon: '식칼',
+    armor: '앞치마',
+    accessory: '손목시계',
+    weaponBonus: 1,
+    armorBonus: 0,
+    emoji: '🍳',
+    description: '창의적 행동에 보정',
   },
-
-  // 아이템 희귀도 색상
-  rarity: {
-    legendary: { bg: 'rgba(234, 88, 12, 0.5)', text: '#fed7aa' },
-    rare: { bg: 'rgba(147, 51, 234, 0.5)', text: '#e9d5ff' },
-    uncommon: { bg: 'rgba(37, 99, 235, 0.5)', text: '#bfdbfe' },
-    common: { bg: 'rgba(107, 114, 128, 0.5)', text: '#e5e7eb' },
+  {
+    id: 'developer',
+    label: '개발자',
+    trait: '겁 많은',
+    weakness: '사회적 상황에 약함',
+    weapon: '노트북',
+    armor: '후디',
+    accessory: '보조배터리',
+    weaponBonus: 0,
+    armorBonus: 0,
+    emoji: '💻',
+    description: '기술적 행동에 보정',
   },
-
-  // 폰트 (Noto Sans KR로 통일 - 모바일 가독성)
-  fonts: {
-    title: "'Noto Sans KR', sans-serif",
-    body: "'Noto Sans KR', sans-serif",
+  {
+    id: 'salesman',
+    label: '영업사원',
+    trait: '말빨 좋은',
+    weakness: '체력이 약함',
+    weapon: '명함',
+    armor: '정장',
+    accessory: '고급 볼펜',
+    weaponBonus: 0,
+    armorBonus: 0,
+    emoji: '💼',
+    description: '사회적 행동에 보정',
   },
-
-  // 테두리 (픽셀 스타일)
-  borders: {
-    primary: '2px solid #a78bfa',
-    secondary: '2px solid #4f46e5',
-    accent: '2px solid #06b6d4',
-    card: '2px solid #4f46e5',
-    dashed: '2px dashed #4f46e5',
-  },
-} as const;
+] as const;
