@@ -78,33 +78,3 @@ export const theme = {
     dashed: '2px dashed #4f46e5',
   },
 } as const;
-
-// 클래스 정보 (이모지 복원 - 픽셀 게임 느낌)
-export const CLASS_INFO = {
-  warrior: {
-    name: '전사',
-    label: 'WARRIOR',
-    icon: '🗡️',
-    desc: '파티 피해 -10%'
-  },
-  mage: {
-    name: '마법사',
-    label: 'MAGE',
-    icon: '🔮',
-    desc: '광역 전투 유리'
-  },
-  cleric: {
-    name: '성직자',
-    label: 'CLERIC',
-    icon: '✨',
-    desc: '전투 후 자동 힐'
-  },
-  rogue: {
-    name: '도적',
-    label: 'ROGUE',
-    icon: '🗝️',
-    desc: '숨긴 아이템 발견'
-  },
-} as const;
-
-export type PlayerClass = keyof typeof CLASS_INFO;

@@ -1,11 +1,5 @@
 // ===== 기본 타입 =====
 
-export interface Position {
-  x: number;
-  y: number;
-}
-
-export type PlayerClass = 'warrior' | 'mage' | 'cleric' | 'rogue';
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type ItemType = 'weapon' | 'armor' | 'accessory' | 'consumable';
 
@@ -15,27 +9,18 @@ export interface Player {
   id: string;
   socketId: string;
   name: string;
-  class: PlayerClass;
-  position: Position;
-  
+
   hp: number;
   maxHp: number;
-  combatPower: number;  // 장비 + 클래스 보정
-  
+  combatPower: number;
+
   isAlive: boolean;
   hasEscaped: boolean;
-  
+
   inventory: Item[];
-  equipment: Equipment;
-  
+
   // 열쇠
   keys: number;
-}
-
-export interface Equipment {
-  weapon: Item | null;
-  armor: Item | null;
-  accessory: Item | null;
 }
 
 // ===== 아이템 =====
@@ -50,81 +35,66 @@ export interface Item {
   description: string;
 }
 
-// ===== 몬스터 =====
+// ===== 적 (EarthBound 스타일) =====
 
-export interface Monster {
+export interface Enemy {
   id: string;
   name: string;
+  description: string;
   combatPower: number;
-  description: string;
+  imageKey: string;      // 이모지 또는 이미지 키
+  attackMessage: string; // 공격 시 표시할 메시지
+  abilities?: string;    // LLM이 활용할 능력 설명
+  isBoss?: boolean;      // 보스 여부
 }
 
-// ===== 던전 =====
+// ===== 웨이브 시스템 =====
 
-export interface DungeonTile {
-  x: number;
-  y: number;
-  type: 'floor' | 'wall' | 'door' | 'portal';
-  explored: boolean;
-  content: TileContent | null;
+export interface Wave {
+  waveNumber: number;
+  enemy: Enemy;
+  isCleared: boolean;
 }
 
-export type TileContent = 
-  | { type: 'monster'; monster: Monster }
-  | { type: 'item'; item: Item }
-  | { type: 'event'; eventId: string }
-  | { type: 'portal' };
+// ===== 런 상태 =====
 
-export interface Dungeon {
-  id: string;
-  mapType: MapType;
-  theme: string;
-  description: string;
-  tiles: DungeonTile[][];
-  width: number;
-  height: number;
-  spawnPoint: Position;
-  portalPosition: Position;
+export interface RunState {
+  currentWave: number;
+  maxWaves: number;  // MVP: 3, 전체: 10
+  accumulatedRewards: Item[];
 }
 
-export type MapType = 'goblin_cave' | 'abandoned_mine' | 'ancient_temple' | 'abyss';
+// ===== 전투 상태 =====
 
-// ===== 전투 (즉시 판정) =====
+export interface BattleState {
+  enemy: Enemy | null;
+  narration: string;
+  isWaitingForChoice: boolean;
+  isProcessing: boolean;  // 전투 처리 중
+}
+
+// ===== 투표 시스템 (다수결) =====
+
+export type VoteChoice = 'continue' | 'retreat';
+
+export interface VoteState {
+  votes: Record<string, VoteChoice>;  // playerId -> choice
+  totalPlayers: number;
+  deadline?: number;  // 타임아웃 (선택적)
+}
+
+// ===== 전투 결과 =====
 
 export type CombatResult = 'perfect' | 'victory' | 'narrow' | 'defeat' | 'wipe';
 
 export interface CombatOutcome {
   result: CombatResult;
-  monster: Monster;
-  monsterPosition: Position;  // 몬스터 위치 (전투 후 타일 업데이트용)
+  enemy: Enemy;
   participants: string[];  // 참전한 플레이어 ID
   damages: { playerId: string; damage: number }[];
   drops: Item[];
   description: string;  // AI 생성 상황 묘사
 }
-
-// ===== 이벤트 =====
-
-export interface GameEvent {
-  id: string;
-  title: string;
-  description: string;
-  choices: EventChoice[];
-}
-
-export interface EventChoice {
-  id: string;
-  text: string;
-  result: string;
-  effect: EventEffect;
-}
-
-export type EventEffect =
-  | { type: 'heal'; amount: number }
-  | { type: 'damage'; amount: number }
-  | { type: 'item'; item: Item }
-  | { type: 'combat'; monster: Monster }
-  | { type: 'none' };
 
 // ===== 방 =====
 
@@ -134,9 +104,13 @@ export interface Room {
   code: string;
   players: Player[];
   state: RoomState;
-  dungeon: Dungeon | null;
   hostId: string;
-  mapType: MapType;
+
+  // 런 상태
+  run: RunState | null;
+
+  // 투표 상태
+  vote: VoteState | null;
 }
 
 // ===== 게임 결과 =====
@@ -144,8 +118,8 @@ export interface Room {
 export interface GameResult {
   escaped: string[];      // 탈출 성공한 플레이어
   died: string[];         // 사망한 플레이어
-  totalLoot: Item[];      // 탈출한 총 전리품
-  duration: number;       // 플레이 시간 (초)
+  waveReached: number;    // 도달한 웨이브
+  totalRewards: Item[];   // 획득한 보상
 }
 
 // ===== Socket 페이로드 =====
@@ -153,17 +127,11 @@ export interface GameResult {
 // 로비
 export interface CreateRoomPayload {
   playerName: string;
-  playerClass: PlayerClass;
 }
 
 export interface JoinRoomPayload {
   roomCode: string;
   playerName: string;
-  playerClass: PlayerClass;
-}
-
-export interface StartGamePayload {
-  mapType: MapType;
 }
 
 export interface RoomCreatedResponse {
@@ -176,73 +144,109 @@ export interface RoomJoinedResponse {
   player: Player;
 }
 
+// 게임 시작
 export interface GameStartedResponse {
-  dungeon: Dungeon;
   players: Player[];
+  run: RunState;
+  wave: Wave;
 }
 
-// 탐험
-export interface PlayerMovePayload {
-  position: Position;
+// 웨이브
+export interface WaveStartPayload {
+  wave: Wave;
 }
 
-export interface PositionsUpdateResponse {
-  positions: { playerId: string; position: Position }[];
+// 공격 (전투 수행)
+export interface AttackPayload {
+  // 특별한 파라미터 없음 - 모든 생존 플레이어 자동 참전
 }
 
-export interface TileRevealedResponse {
-  tiles: DungeonTile[];
-}
-
-// 전투
 export interface CombatResultResponse {
   outcome: CombatOutcome;
   updatedPlayers: Player[];
+  run: RunState;
 }
 
-// 아이템
-export interface ItemPickupPayload {
-  itemId: string;
-  position: Position;
+// 투표
+export interface PlayerVotePayload {
+  choice: VoteChoice;
 }
 
-export interface ItemAcquiredResponse {
-  playerId: string;
-  item: Item;
+export interface VoteUpdateResponse {
+  votes: VoteState;
+  result?: VoteChoice;  // 투표 완료 시 결과
 }
 
-// 이벤트
-export interface EventTriggeredResponse {
-  event: GameEvent;
+// 런 종료
+export interface RunEndPayload {
+  waveReached: number;
+  rewards: Item[];
+  escaped: boolean;
 }
 
-export interface EventChoicePayload {
-  eventId: string;
-  choiceId: string;
-}
-
-export interface EventResultResponse {
-  result: string;
-  effect: EventEffect;
-  updatedPlayer: Player;
-}
-
-// 게임 종료
-export interface PlayerEscapedResponse {
-  playerId: string;
-  playerName: string;
-  savedItems: Item[];
-}
-
+// 플레이어 상태
 export interface PlayerDiedResponse {
   playerId: string;
   playerName: string;
-  droppedItems: Item[];
-  position: Position;
 }
 
 export interface GameOverResponse {
   result: GameResult;
+}
+
+// ===== 전투 선택지 시스템 (TTRPG 스타일) =====
+
+export type ActionType = 'aggressive' | 'defensive' | 'tactical' | 'risky';
+
+export interface CombatAction {
+  id: string;
+  type: ActionType;
+  name: string;           // "정면 돌파"
+  description: string;    // LLM 생성 상황 묘사
+  emoji: string;
+}
+
+export interface DiceRoll {
+  value: number;      // 1-20
+  isCritical: boolean;
+  isFumble: boolean;
+}
+
+// LLM 전투 판정 결과
+export interface LLMCombatResult {
+  result: CombatResult;
+  damages: { playerId: string; damage: number }[];
+  narration: string;
+}
+
+// 선택지 상태 (클라이언트용)
+export interface ChoiceState {
+  actions: CombatAction[];
+  votes: Record<string, string>;  // playerId -> actionId
+  selectedActionId: string | null;
+  diceRoll: DiceRoll | null;
+  deadline: number;
+}
+
+// ===== Socket 페이로드 (선택지 시스템) =====
+
+export interface ChoicesGeneratedResponse {
+  actions: CombatAction[];
+  deadline: number;
+}
+
+export interface SelectActionPayload {
+  actionId: string;
+}
+
+export interface ActionVoteUpdateResponse {
+  votes: Record<string, string>;  // playerId -> actionId
+  totalPlayers: number;
+}
+
+export interface DiceRolledResponse {
+  selectedAction: CombatAction;
+  diceRoll: DiceRoll;
 }
 
 // ===== 상수 =====
@@ -251,42 +255,37 @@ export const GAME_CONSTANTS = {
   // 방
   ROOM_CODE_LENGTH: 4,
   MAX_PLAYERS: 4,
-  MIN_PLAYERS: 2,
-  
+  MIN_PLAYERS: 1,  // MVP: 1명도 가능
+
   // 열쇠
   DAILY_KEYS: 1,
   WEEKEND_KEYS: 2,
   MAX_KEYS: 3,
-  
-  // 클래스 스탯
-  CLASS_STATS: {
-    warrior: { hp: 120, combatPower: 20, ability: '파티 피해 -10%' },
-    mage: { hp: 70, combatPower: 30, ability: '광역 전투 유리' },
-    cleric: { hp: 90, combatPower: 10, ability: '전투 후 자동 힐' },
-    rogue: { hp: 80, combatPower: 15, ability: '숨긴 아이템 발견' },
-  },
-  
+
+  // 기본 스탯
+  DEFAULT_HP: 100,
+  DEFAULT_COMBAT_POWER: 20,
+
   // 전투
   COMBAT_RANDOM_RANGE: 0.2,  // ±20%
-  
+
+  // 웨이브
+  MVP_MAX_WAVES: 3,
+  FULL_MAX_WAVES: 10,
+  MID_BOSS_WAVE: 5,    // 중간보스 웨이브
+  FINAL_BOSS_WAVE: 10, // 최종보스 웨이브
+
   // 인원별 난이도
   DIFFICULTY_SCALE: {
     4: { hpMod: 1.0, atkMod: 1.0 },
-    3: { hpMod: 0.75, atkMod: 0.85 },
-    2: { hpMod: 0.5, atkMod: 0.7 },
+    3: { hpMod: 0.85, atkMod: 0.9 },
+    2: { hpMod: 0.7, atkMod: 0.8 },
+    1: { hpMod: 0.5, atkMod: 0.6 },
   },
-  
-  // 맵
-  MAP_INFO: {
-    goblin_cave: { name: '고블린 동굴', difficulty: 1, duration: 10 },
-    abandoned_mine: { name: '버려진 광산', difficulty: 2, duration: 12 },
-    ancient_temple: { name: '고대 신전', difficulty: 3, duration: 15 },
-    abyss: { name: '심연의 던전', difficulty: 4, duration: 20 },
-  },
-  
-  // 위치 동기화
-  POSITION_SYNC_INTERVAL: 100,  // ms
-  
-  // 시야
-  VIEW_DISTANCE: 3,  // 타일
+
+  // 투표 타임아웃
+  VOTE_TIMEOUT: 30000,  // 30초
+
+  // 선택지 타임아웃
+  ACTION_CHOICE_TIMEOUT: 20000,  // 20초
 } as const;

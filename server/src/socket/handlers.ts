@@ -1,31 +1,43 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager } from '../game/Room.js';
 import { createPlayer } from '../game/Player.js';
-import { generateDungeon } from '../../../shared/dungeonGenerator.js';
-import { resolveCombat, getParticipantsInRange } from '../game/Combat.js';
-import { generateCombatNarrative } from '../ai/combatNarrator.js';
+import { getEnemyForWave } from '../game/enemies.js';
+import { rollDice, isVictory, isPartyWiped } from '../game/Combat.js';
+import {
+  generateCombatChoices,
+  resolveCombatWithLLM,
+} from '../ai/combatNarrator.js';
+import { generateDrops } from '../game/items.js';
 import type {
   CreateRoomPayload,
   JoinRoomPayload,
-  StartGamePayload,
-  PlayerMovePayload,
+  PlayerVotePayload,
+  SelectActionPayload,
   RoomCreatedResponse,
   RoomJoinedResponse,
-  Room,
-  Position,
-  Player,
-  MapType,
-  Monster,
+  GameStartedResponse,
   CombatResultResponse,
+  VoteUpdateResponse,
+  RunEndPayload,
+  ChoicesGeneratedResponse,
+  ActionVoteUpdateResponse,
+  DiceRolledResponse,
+  Player,
+  Wave,
+  CombatAction,
+  CombatOutcome,
 } from '@daily-dungeon/shared';
+import { GAME_CONSTANTS } from '@daily-dungeon/shared';
 
-// 전투 중인 몬스터 추적 (중복 전투 방지)
-const activeMonsters = new Set<string>();
-
-interface EncounterMonsterPayload {
-  monsterId: string;
-  monsterPos: Position;
+// 방별 행동 선택 투표 상태
+interface ActionVoteState {
+  actions: CombatAction[];
+  votes: Record<string, string>; // playerId -> actionId
+  deadline: number;
+  timeoutId?: NodeJS.Timeout;
 }
+
+const actionVotes = new Map<string, ActionVoteState>();
 
 export function setupSocketHandlers(io: Server) {
   io.on('connection', (socket: Socket) => {
@@ -33,7 +45,7 @@ export function setupSocketHandlers(io: Server) {
 
     // 방 생성
     socket.on('create-room', (payload: CreateRoomPayload) => {
-      const player = createPlayer(socket.id, payload.playerName, payload.playerClass);
+      const player = createPlayer(socket.id, payload.playerName);
       const room = roomManager.createRoom(player);
 
       socket.join(room.code);
@@ -49,7 +61,7 @@ export function setupSocketHandlers(io: Server) {
 
     // 방 참가
     socket.on('join-room', (payload: JoinRoomPayload) => {
-      const player = createPlayer(socket.id, payload.playerName, payload.playerClass);
+      const player = createPlayer(socket.id, payload.playerName);
       const room = roomManager.joinRoom(payload.roomCode, player);
 
       if (!room) {
@@ -73,7 +85,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // 게임 시작
-    socket.on('start-game', (payload: StartGamePayload) => {
+    socket.on('start-game', () => {
       console.log(`[start-game] Socket ${socket.id} requested game start`);
 
       const room = roomManager.getPlayerRoom(socket.id);
@@ -89,157 +101,181 @@ export function setupSocketHandlers(io: Server) {
       }
 
       console.log(`[start-game] Player ${player.name} (${player.id}) trying to start room ${room.code}`);
-      console.log(`[start-game] Room state: hostId=${room.hostId}, players=${room.players.length}, state=${room.state}`);
-
-      if (payload.mapType) {
-        roomManager.setMapType(room.code, payload.mapType);
-      }
 
       const startedRoom = roomManager.startGame(room.code, player.id);
-      if (!startedRoom) {
+      if (!startedRoom || !startedRoom.run) {
         console.log(`[start-game] startGame returned null - hostId mismatch or not enough players`);
-        socket.emit('start-error', { message: '게임을 시작할 수 없습니다. (호스트만 시작 가능, 최소 2명 필요)' });
+        socket.emit('start-error', { message: '게임을 시작할 수 없습니다. (호스트만 시작 가능)' });
         return;
       }
 
-      // 서버에서 던전 생성
-      const dungeon = generateDungeon(startedRoom.mapType as MapType);
-
-      // room에 던전 데이터 저장
-      startedRoom.dungeon = {
-        id: `dungeon-${room.code}-${Date.now()}`,
-        mapType: startedRoom.mapType,
-        theme: startedRoom.mapType,
-        description: '',
-        tiles: dungeon.tiles,
-        width: dungeon.tiles[0].length,
-        height: dungeon.tiles.length,
-        spawnPoint: dungeon.spawnPoint,
-        portalPosition: dungeon.portalPosition,
+      // 첫 번째 웨이브 생성
+      const enemy = getEnemyForWave(1, startedRoom.players.length);
+      const wave: Wave = {
+        waveNumber: 1,
+        enemy,
+        isCleared: false,
       };
 
-      // 모든 플레이어에게 게임 시작 알림 (동일한 던전 데이터 전송)
-      io.to(room.code).emit('game-started', {
-        dungeon: dungeon.tiles,
-        spawnPoint: dungeon.spawnPoint,
-        portalPosition: dungeon.portalPosition,
+      // 게임 시작 응답
+      const response: GameStartedResponse = {
         players: startedRoom.players,
-        mapType: startedRoom.mapType,
-      });
+        run: startedRoom.run,
+        wave,
+      };
 
+      io.to(room.code).emit('game-started', response);
       console.log(`Game started in room ${room.code}`);
     });
 
-    // 플레이어 이동
-    socket.on('player-move', (payload: PlayerMovePayload) => {
+    // 선택지 요청 (새로운 전투 흐름)
+    socket.on('request-choices', async () => {
       const room = roomManager.getPlayerRoom(socket.id);
-      if (!room || room.state !== 'playing') return;
-
-      const player = room.players.find((p: Player) => p.socketId === socket.id);
-      if (!player) return;
-
-      // 플레이어 위치 업데이트
-      player.position = payload.position;
-
-      // 다른 플레이어들에게 위치 브로드캐스트
-      socket.to(room.code).emit('positions-update', {
-        positions: [{ playerId: player.id, position: payload.position }],
-      });
-    });
-
-    // 몬스터 조우
-    socket.on('encounter-monster', async (payload: EncounterMonsterPayload) => {
-      const room = roomManager.getPlayerRoom(socket.id);
-      if (!room || room.state !== 'playing' || !room.dungeon) return;
+      if (!room || room.state !== 'playing' || !room.run) return;
 
       const player = room.players.find((p: Player) => p.socketId === socket.id);
       if (!player || !player.isAlive) return;
 
-      // 이미 전투 중인 몬스터인지 확인
-      const monsterKey = `${room.code}-${payload.monsterId}`;
-      if (activeMonsters.has(monsterKey)) {
-        return; // 이미 전투 처리 중
+      // 이미 선택지가 생성되어 있는지 확인
+      if (actionVotes.has(room.code)) {
+        const existingState = actionVotes.get(room.code)!;
+        const response: ChoicesGeneratedResponse = {
+          actions: existingState.actions,
+          deadline: existingState.deadline,
+        };
+        socket.emit('choices-generated', response);
+        return;
       }
-      activeMonsters.add(monsterKey);
+
+      // 현재 웨이브의 적 가져오기
+      const enemy = getEnemyForWave(room.run.currentWave, room.players.length);
+      const participants = room.players.filter((p) => p.isAlive && !p.hasEscaped);
 
       try {
-        // 던전에서 몬스터 찾기
-        const { tiles } = room.dungeon;
-        const tile = tiles[payload.monsterPos.y]?.[payload.monsterPos.x];
+        // LLM으로 선택지 생성
+        const actions = await generateCombatChoices(enemy, participants, room.run.currentWave);
+        const deadline = Date.now() + GAME_CONSTANTS.ACTION_CHOICE_TIMEOUT;
 
-        if (!tile || tile.content?.type !== 'monster') {
-          activeMonsters.delete(monsterKey);
-          return;
-        }
-
-        const monster = tile.content.monster;
-
-        // 전투 판정
-        const { outcome, updatedPlayers } = resolveCombat({
-          allPlayers: room.players,
-          monster,
-          monsterPos: payload.monsterPos,
-          mapType: room.mapType,
-        });
-
-        // 참전자 정보
-        const participants = room.players.filter((p) =>
-          outcome.participants.includes(p.id)
-        );
-
-        // AI 전투 묘사 생성
-        try {
-          outcome.description = await generateCombatNarrative(outcome, participants);
-        } catch (err) {
-          console.error('Failed to generate narrative:', err);
-          outcome.description = '전투가 벌어졌다!';
-        }
-
-        // 플레이어 상태 업데이트
-        for (const updated of updatedPlayers) {
-          const idx = room.players.findIndex((p) => p.id === updated.id);
-          if (idx !== -1) {
-            room.players[idx] = updated;
-          }
-        }
-
-        // 몬스터 제거 (타일에서)
-        tile.content = null;
-
-        // 드랍 아이템이 있으면 타일에 배치
-        if (outcome.drops.length > 0) {
-          tile.content = { type: 'item', item: outcome.drops[0] };
-        }
-
-        // 전투 결과 브로드캐스트
-        const response: CombatResultResponse = {
-          outcome,
-          updatedPlayers: room.players,
+        // 투표 상태 초기화
+        const voteState: ActionVoteState = {
+          actions,
+          votes: {},
+          deadline,
         };
 
-        io.to(room.code).emit('combat-result', response);
+        // 타임아웃 설정 (defensive 자동 선택)
+        voteState.timeoutId = setTimeout(() => {
+          handleActionTimeout(io, room.code);
+        }, GAME_CONSTANTS.ACTION_CHOICE_TIMEOUT);
 
-        // 사망한 플레이어 처리
-        for (const p of room.players) {
-          if (!p.isAlive) {
-            io.to(room.code).emit('player-died', {
-              playerId: p.id,
-              playerName: p.name,
-              droppedItems: p.inventory,
-              position: p.position,
-            });
-          }
+        actionVotes.set(room.code, voteState);
+
+        const response: ChoicesGeneratedResponse = {
+          actions,
+          deadline,
+        };
+
+        io.to(room.code).emit('choices-generated', response);
+        console.log(`Choices generated for room ${room.code}`);
+      } catch (err) {
+        console.error('Failed to generate choices:', err);
+        socket.emit('choices-error', { message: '선택지 생성에 실패했습니다.' });
+      }
+    });
+
+    // 행동 선택/투표
+    socket.on('select-action', async (payload: SelectActionPayload) => {
+      const room = roomManager.getPlayerRoom(socket.id);
+      if (!room || room.state !== 'playing' || !room.run) return;
+
+      const player = room.players.find((p: Player) => p.socketId === socket.id);
+      if (!player || !player.isAlive) return;
+
+      const voteState = actionVotes.get(room.code);
+      if (!voteState) return;
+
+      // 투표 등록
+      voteState.votes[player.id] = payload.actionId;
+
+      // 투표 현황 브로드캐스트
+      const alivePlayers = room.players.filter((p) => p.isAlive && !p.hasEscaped);
+      const voteUpdate: ActionVoteUpdateResponse = {
+        votes: voteState.votes,
+        totalPlayers: alivePlayers.length,
+      };
+      io.to(room.code).emit('action-vote-update', voteUpdate);
+
+      console.log(`${player.name} voted for action ${payload.actionId} in room ${room.code}`);
+
+      // 모든 플레이어가 투표했는지 확인
+      if (Object.keys(voteState.votes).length >= alivePlayers.length) {
+        // 타임아웃 취소
+        if (voteState.timeoutId) {
+          clearTimeout(voteState.timeoutId);
         }
 
-        console.log(
-          `Combat in room ${room.code}: ${monster.name} vs ${participants.length} players - ${outcome.result}`
-        );
-      } finally {
-        // 전투 완료 후 잠금 해제
-        setTimeout(() => {
-          activeMonsters.delete(monsterKey);
-        }, 500); // 0.5초 후 해제 (중복 방지)
+        // 전투 실행
+        await executeCombat(io, room.code);
       }
+    });
+
+    // 기존 공격 (하위 호환성 - 기존 클라이언트용)
+    socket.on('attack', async () => {
+      // request-choices로 리다이렉트
+      socket.emit('use-new-combat', { message: '새 전투 시스템을 사용하세요.' });
+    });
+
+    // 투표 제출
+    socket.on('player-vote', (payload: PlayerVotePayload) => {
+      const room = roomManager.getPlayerRoom(socket.id);
+      if (!room || room.state !== 'playing' || !room.vote) return;
+
+      const player = room.players.find((p: Player) => p.socketId === socket.id);
+      if (!player || !player.isAlive) return;
+
+      // 투표 제출
+      const updatedVotes = roomManager.submitVote(room.code, player.id, payload.choice);
+      if (!updatedVotes) return;
+
+      // 투표 현황 브로드캐스트
+      const voteUpdate: VoteUpdateResponse = {
+        votes: updatedVotes,
+      };
+
+      // 투표 완료 여부 확인
+      const result = roomManager.getVoteResult(room.code);
+      if (result) {
+        voteUpdate.result = result;
+
+        if (result === 'continue') {
+          // 다음 웨이브로 진행
+          const newRun = roomManager.advanceWave(room.code);
+          if (newRun) {
+            const enemy = getEnemyForWave(newRun.currentWave, room.players.length);
+            const wave: Wave = {
+              waveNumber: newRun.currentWave,
+              enemy,
+              isCleared: false,
+            };
+            io.to(room.code).emit('wave-start', { wave, run: newRun });
+          }
+        } else {
+          // 탈출
+          const run = room.run;
+          if (run) {
+            const endPayload: RunEndPayload = {
+              waveReached: run.currentWave,
+              rewards: run.accumulatedRewards,
+              escaped: true,
+            };
+            io.to(room.code).emit('run-end', endPayload);
+            roomManager.endRun(room.code, true);
+          }
+        }
+      }
+
+      io.to(room.code).emit('vote-update', voteUpdate);
+      console.log(`Vote in room ${room.code}: ${player.name} voted ${payload.choice}`);
     });
 
     // 방 나가기
@@ -255,6 +291,188 @@ export function setupSocketHandlers(io: Server) {
   });
 }
 
+// 행동 선택 타임아웃 처리
+async function handleActionTimeout(io: Server, roomCode: string) {
+  const voteState = actionVotes.get(roomCode);
+  if (!voteState) return;
+
+  const room = roomManager.getRoom(roomCode);
+  if (!room) return;
+
+  // 투표하지 않은 플레이어는 defensive 자동 선택
+  const alivePlayers = room.players.filter((p) => p.isAlive && !p.hasEscaped);
+  const defensiveAction = voteState.actions.find((a) => a.type === 'defensive') || voteState.actions[0];
+
+  for (const player of alivePlayers) {
+    if (!voteState.votes[player.id]) {
+      voteState.votes[player.id] = defensiveAction.id;
+    }
+  }
+
+  // 전투 실행
+  await executeCombat(io, roomCode);
+}
+
+// 전투 실행 (새로운 흐름)
+async function executeCombat(io: Server, roomCode: string) {
+  const voteState = actionVotes.get(roomCode);
+  if (!voteState) return;
+
+  const room = roomManager.getRoom(roomCode);
+  if (!room || !room.run) return;
+
+  // 다수결로 행동 결정
+  const voteCounts: Record<string, number> = {};
+  for (const actionId of Object.values(voteState.votes)) {
+    voteCounts[actionId] = (voteCounts[actionId] || 0) + 1;
+  }
+
+  let selectedActionId = Object.keys(voteCounts).reduce((a, b) =>
+    voteCounts[a] > voteCounts[b] ? a : b
+  );
+
+  const selectedAction = voteState.actions.find((a) => a.id === selectedActionId) || voteState.actions[0];
+
+  // 주사위 굴림
+  const diceResult = rollDice();
+
+  // 주사위 결과 + 선택된 행동 브로드캐스트
+  const diceResponse: DiceRolledResponse = {
+    selectedAction,
+    diceRoll: diceResult,
+  };
+  io.to(roomCode).emit('dice-rolled', diceResponse);
+
+  // 잠시 대기 (주사위 애니메이션 시간)
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // 현재 웨이브의 적 가져오기
+  const enemy = getEnemyForWave(room.run.currentWave, room.players.length);
+  const participants = room.players.filter((p) => p.isAlive && !p.hasEscaped);
+
+  try {
+    // LLM으로 전투 결과 판정
+    const llmResult = await resolveCombatWithLLM(
+      enemy,
+      participants,
+      selectedAction,
+      diceResult,
+      room.run.currentWave
+    );
+
+    // 플레이어 상태 업데이트
+    const updatedPlayers = applyDamages(room.players, llmResult.damages);
+    roomManager.updatePlayers(roomCode, updatedPlayers);
+
+    // 드롭 아이템 생성
+    const drops = generateDrops(llmResult.result, room.run.currentWave);
+
+    // 드롭 아이템을 누적 보상에 추가
+    if (drops.length > 0) {
+      room.run.accumulatedRewards.push(...drops);
+    }
+
+    // 전투 결과 생성
+    const outcome: CombatOutcome = {
+      result: llmResult.result,
+      enemy,
+      participants: participants.map((p) => p.id),
+      damages: llmResult.damages,
+      drops,
+      description: llmResult.narration,
+    };
+
+    // 전투 결과 브로드캐스트
+    const response: CombatResultResponse = {
+      outcome,
+      updatedPlayers,
+      run: room.run,
+    };
+
+    io.to(roomCode).emit('combat-result', response);
+
+    // 사망한 플레이어 처리
+    for (const p of updatedPlayers) {
+      const originalPlayer = room.players.find((op) => op.id === p.id);
+      if (originalPlayer?.isAlive && !p.isAlive) {
+        io.to(roomCode).emit('player-died', {
+          playerId: p.id,
+          playerName: p.name,
+        });
+      }
+    }
+
+    // 파티 전멸 체크
+    if (isPartyWiped(updatedPlayers)) {
+      const endPayload: RunEndPayload = {
+        waveReached: room.run.currentWave,
+        rewards: room.run.accumulatedRewards,
+        escaped: false,
+      };
+      io.to(roomCode).emit('run-end', endPayload);
+      roomManager.endRun(roomCode, false);
+      actionVotes.delete(roomCode);
+      return;
+    }
+
+    // 승리 시 웨이브 클리어 처리
+    if (isVictory(llmResult.result)) {
+      // 마지막 웨이브인지 확인
+      if (room.run.currentWave >= room.run.maxWaves) {
+        const endPayload: RunEndPayload = {
+          waveReached: room.run.currentWave,
+          rewards: room.run.accumulatedRewards,
+          escaped: true,
+        };
+        io.to(roomCode).emit('run-end', endPayload);
+        roomManager.endRun(roomCode, true);
+      } else {
+        // 투표 시작
+        const continueVoteState = roomManager.startVote(roomCode);
+        if (continueVoteState) {
+          io.to(roomCode).emit('vote-start', { votes: continueVoteState });
+        }
+      }
+    }
+
+    // 행동 선택 상태 초기화
+    actionVotes.delete(roomCode);
+
+    console.log(
+      `Combat in room ${roomCode}: ${enemy.name} - ${selectedAction.name} (🎲${diceResult.value}) - ${llmResult.result}`
+    );
+  } catch (err) {
+    console.error('Combat error:', err);
+    actionVotes.delete(roomCode);
+  }
+}
+
+// 데미지 적용
+function applyDamages(
+  players: Player[],
+  damages: { playerId: string; damage: number }[]
+): Player[] {
+  const updatedPlayers: Player[] = [];
+
+  for (const player of players) {
+    const damageInfo = damages.find((d) => d.playerId === player.id);
+    if (damageInfo) {
+      const newHp = Math.max(0, player.hp - damageInfo.damage);
+      const isAlive = newHp > 0;
+
+      updatedPlayers.push({
+        ...player,
+        hp: newHp,
+        isAlive,
+      });
+    } else {
+      updatedPlayers.push(player);
+    }
+  }
+
+  return updatedPlayers;
+}
+
 function handleDisconnect(socket: Socket, io: Server) {
   const result = roomManager.removePlayerBySocketId(socket.id);
   if (result) {
@@ -262,5 +480,11 @@ function handleDisconnect(socket: Socket, io: Server) {
       playerId: result.playerId,
       room: result.room,
     });
+
+    // 행동 선택 상태도 정리
+    const voteState = actionVotes.get(result.room.code);
+    if (voteState) {
+      delete voteState.votes[result.playerId];
+    }
   }
 }

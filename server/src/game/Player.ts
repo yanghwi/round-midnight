@@ -1,37 +1,22 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Player, PlayerClass } from '@daily-dungeon/shared';
+import type { Player } from '@daily-dungeon/shared';
+import { GAME_CONSTANTS } from '@daily-dungeon/shared';
 
-const CLASS_STATS: Record<PlayerClass, { hp: number; combatPower: number }> = {
-  warrior: { hp: 120, combatPower: 20 },
-  mage: { hp: 70, combatPower: 30 },
-  cleric: { hp: 90, combatPower: 10 },
-  rogue: { hp: 80, combatPower: 15 },
-};
-
-export function createPlayer(
-  socketId: string,
-  name: string,
-  playerClass: PlayerClass
-): Player {
-  const stats = CLASS_STATS[playerClass];
-
+/**
+ * 플레이어 생성
+ * 직업 시스템 제거 - 모든 플레이어가 동일한 기본 스탯으로 시작
+ */
+export function createPlayer(socketId: string, name: string): Player {
   return {
     id: uuidv4(),
     socketId,
     name,
-    class: playerClass,
-    position: { x: 0, y: 0 },
-    hp: stats.hp,
-    maxHp: stats.hp,
-    combatPower: stats.combatPower,
+    hp: GAME_CONSTANTS.DEFAULT_HP,
+    maxHp: GAME_CONSTANTS.DEFAULT_HP,
+    combatPower: GAME_CONSTANTS.DEFAULT_COMBAT_POWER,
     isAlive: true,
     hasEscaped: false,
     inventory: [],
-    equipment: {
-      weapon: null,
-      armor: null,
-      accessory: null,
-    },
     keys: 1,
   };
 }

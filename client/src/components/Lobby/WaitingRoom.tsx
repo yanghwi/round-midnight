@@ -1,6 +1,7 @@
 import React from 'react';
-import type { Room, Player, PlayerClass } from '@daily-dungeon/shared';
-import { theme, CLASS_INFO } from '../../styles/theme';
+import type { Room, Player } from '@daily-dungeon/shared';
+import { theme } from '../../styles/theme';
+import { GAME_CONSTANTS } from '@daily-dungeon/shared';
 
 interface WaitingRoomProps {
   room: Room;
@@ -11,7 +12,7 @@ interface WaitingRoomProps {
 
 export function WaitingRoom({ room, player, onStartGame, onLeaveRoom }: WaitingRoomProps) {
   const isHost = room.hostId === player.id;
-  const canStart = room.players.length >= 2;
+  const canStart = room.players.length >= GAME_CONSTANTS.MIN_PLAYERS;
 
   return (
     <div style={styles.container}>
@@ -38,15 +39,17 @@ export function WaitingRoom({ room, player, onStartGame, onLeaveRoom }: WaitingR
                 ...(p.id === player.id ? styles.playerCardSelf : {}),
               }}
             >
-              <div style={styles.classIcon}>
-                <span style={styles.classIconEmoji}>{CLASS_INFO[p.class].icon}</span>
+              <div style={styles.avatar}>
+                <span style={styles.avatarEmoji}>👤</span>
               </div>
               <div style={styles.playerInfo}>
                 <span style={styles.playerName}>
                   {p.name}
                   {p.id === room.hostId && <span style={styles.hostBadge}>HOST</span>}
                 </span>
-                <span style={styles.playerClass}>{CLASS_INFO[p.class].name}</span>
+                <span style={styles.playerStats}>
+                  HP: {p.hp} | 전투력: {p.combatPower}
+                </span>
               </div>
             </div>
           ))}
@@ -67,7 +70,7 @@ export function WaitingRoom({ room, player, onStartGame, onLeaveRoom }: WaitingR
               ...(canStart ? {} : styles.startButtonDisabled),
             }}
           >
-            {canStart ? '던전 진입' : '최소 2명 필요'}
+            {canStart ? '던전 진입' : '1명 이상 필요'}
           </button>
         )}
 
@@ -147,7 +150,7 @@ const styles: Record<string, React.CSSProperties> = {
   playerCardSelf: {
     borderColor: theme.colors.accent,
   },
-  classIcon: {
+  avatar: {
     width: '48px',
     height: '48px',
     display: 'flex',
@@ -158,7 +161,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: theme.borders.secondary,
     borderRadius: '2px',
   },
-  classIconEmoji: {
+  avatarEmoji: {
     fontSize: '24px',
   },
   playerInfo: {
@@ -183,7 +186,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: theme.colors.primary,
     color: theme.colors.textPrimary,
   },
-  playerClass: {
+  playerStats: {
     fontSize: '12px',
     fontFamily: theme.fonts.body,
     color: theme.colors.textSecondary,

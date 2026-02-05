@@ -2,13 +2,12 @@ import React, { useEffect } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { useGameStore } from './stores/gameStore';
 import { Home, WaitingRoom } from './components/Lobby';
-import { GameScreen } from './components/Game';
-import type { PlayerClass } from '@daily-dungeon/shared';
+import { BattleScreen, VoteScreen, ResultScreen } from './components/Battle';
 import { theme } from './styles/theme';
 
 function App() {
-  const { socket, createRoom, joinRoom, startGame, leaveRoom } = useSocket();
-  const { gameState, room, player, connected, error, clearError } = useGameStore();
+  const { createRoom, joinRoom, startGame, leaveRoom, attack, requestChoices, selectAction, submitVote } = useSocket();
+  const { gameState, room, player, connected, error, clearError, resetGame } = useGameStore();
 
   // 에러 토스트 자동 제거
   useEffect(() => {
@@ -18,13 +17,20 @@ function App() {
     }
   }, [error, clearError]);
 
-  const handleCreateRoom = (name: string, playerClass: PlayerClass) => {
-    createRoom(name, playerClass);
+  const handleCreateRoom = (name: string) => {
+    createRoom(name);
   };
 
-  const handleJoinRoom = (code: string, name: string, playerClass: PlayerClass) => {
-    joinRoom(code, name, playerClass);
+  const handleJoinRoom = (code: string, name: string) => {
+    joinRoom(code, name);
   };
+
+  const handleReturnHome = () => {
+    leaveRoom();
+  };
+
+  // 전투 관련 화면들은 모두 BattleScreen에서 처리
+  const isBattleRelatedState = gameState === 'playing' || gameState === 'choosing' || gameState === 'rolling';
 
   return (
     <div style={styles.app}>
@@ -56,8 +62,20 @@ function App() {
         />
       )}
 
-      {gameState === 'playing' && (
-        <GameScreen socket={socket} />
+      {isBattleRelatedState && (
+        <BattleScreen
+          onAttack={attack}
+          onRequestChoices={requestChoices}
+          onSelectAction={selectAction}
+        />
+      )}
+
+      {gameState === 'voting' && (
+        <VoteScreen onVote={submitVote} />
+      )}
+
+      {gameState === 'result' && (
+        <ResultScreen onReturnHome={handleReturnHome} />
       )}
     </div>
   );

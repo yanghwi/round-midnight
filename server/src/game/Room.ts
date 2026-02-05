@@ -1,4 +1,5 @@
-import type { Room, Player, RoomState, MapType } from '@daily-dungeon/shared';
+import type { Room, Player, VoteState, VoteChoice, RunState } from '@daily-dungeon/shared';
+import { GAME_CONSTANTS } from '@daily-dungeon/shared';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -23,9 +24,9 @@ export class RoomManager {
       code,
       players: [host],
       state: 'waiting',
-      dungeon: null,
       hostId: host.id,
-      mapType: 'goblin_cave',
+      run: null,
+      vote: null,
     };
 
     this.rooms.set(code, room);
@@ -40,7 +41,7 @@ export class RoomManager {
     const room = this.getRoom(code);
     if (!room) return null;
     if (room.state !== 'waiting') return null;
-    if (room.players.length >= 4) return null;
+    if (room.players.length >= GAME_CONSTANTS.MAX_PLAYERS) return null;
 
     room.players.push(player);
     return room;
@@ -69,17 +70,105 @@ export class RoomManager {
     const room = this.getRoom(code);
     if (!room) return null;
     if (room.hostId !== playerId) return null;
-    if (room.players.length < 2) return null;
+    if (room.players.length < GAME_CONSTANTS.MIN_PLAYERS) return null;
     if (room.state !== 'waiting') return null;
 
     room.state = 'playing';
+
+    // 런 상태 초기화 (10웨이브)
+    room.run = {
+      currentWave: 1,
+      maxWaves: GAME_CONSTANTS.FULL_MAX_WAVES,
+      accumulatedRewards: [],
+    };
+
     return room;
   }
 
-  setMapType(code: string, mapType: MapType): void {
+  /**
+   * 다음 웨이브로 진행
+   */
+  advanceWave(code: string): RunState | null {
     const room = this.getRoom(code);
-    if (room && room.state === 'waiting') {
-      room.mapType = mapType;
+    if (!room || !room.run) return null;
+
+    room.run.currentWave += 1;
+    room.vote = null; // 투표 초기화
+
+    return room.run;
+  }
+
+  /**
+   * 투표 시작
+   */
+  startVote(code: string): VoteState | null {
+    const room = this.getRoom(code);
+    if (!room) return null;
+
+    const alivePlayers = room.players.filter((p) => p.isAlive);
+
+    room.vote = {
+      votes: {},
+      totalPlayers: alivePlayers.length,
+      deadline: Date.now() + GAME_CONSTANTS.VOTE_TIMEOUT,
+    };
+
+    return room.vote;
+  }
+
+  /**
+   * 투표 제출
+   */
+  submitVote(code: string, playerId: string, choice: VoteChoice): VoteState | null {
+    const room = this.getRoom(code);
+    if (!room || !room.vote) return null;
+
+    room.vote.votes[playerId] = choice;
+    return room.vote;
+  }
+
+  /**
+   * 투표 결과 계산
+   * 과반수가 'continue' 선택 시 진행, 그 외(동점 포함)는 'retreat'
+   */
+  getVoteResult(code: string): VoteChoice | null {
+    const room = this.getRoom(code);
+    if (!room || !room.vote) return null;
+
+    const votes = Object.values(room.vote.votes);
+    const continueCount = votes.filter((v) => v === 'continue').length;
+    const retreatCount = votes.filter((v) => v === 'retreat').length;
+
+    // 모든 생존 플레이어가 투표했는지 확인
+    if (votes.length < room.vote.totalPlayers) return null;
+
+    // 과반수 판정
+    return continueCount > retreatCount ? 'continue' : 'retreat';
+  }
+
+  /**
+   * 런 종료
+   */
+  endRun(code: string, escaped: boolean): void {
+    const room = this.getRoom(code);
+    if (!room) return;
+
+    room.state = 'finished';
+    room.vote = null;
+  }
+
+  /**
+   * 플레이어 상태 업데이트
+   */
+  updatePlayers(code: string, updatedPlayers: Player[]): void {
+    const room = this.getRoom(code);
+    if (!room) return;
+
+    for (const updated of updatedPlayers) {
+      const idx = room.players.findIndex((p) => p.id === updated.id);
+      if (idx !== -1) {
+        room.players[idx] = updated;
+      }
     }
   }
 

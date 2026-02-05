@@ -2,7 +2,7 @@
 
 ## 한 줄 요약
 
-하루 한 판, 4인 협동 던전 탈출 게임. 탐험은 실시간, 전투는 즉시 판정.
+하루 한 판, 4인 협동 웨이브 전투 게임. EarthBound 스타일의 유머러스한 전투 + TTRPG 선택지 시스템.
 
 ## 핵심 철학
 
@@ -13,9 +13,9 @@
 
 ## 기술 스택
 
-- **프론트엔드**: React + TypeScript + Phaser 3
+- **프론트엔드**: React + TypeScript (순수 React UI)
 - **백엔드**: Node.js + Socket.io + Redis
-- **AI**: Claude API
+- **AI**: Claude API (전투 선택지 생성 + 전투 판정 + 내러티브)
 - **배포**: Vercel + Railway
 
 ## 핵심 시스템
@@ -28,62 +28,91 @@
 - 던전 입장 시 1개 소모
 ```
 
-### 2. 탐험 (실시간)
+### 2. 10웨이브 전투 (TTRPG 스타일)
 ```
-- 탑다운 2D 맵
-- 가상 조이스틱 이동
-- 시야 공유
-- 위치 동기화 (100ms 간격)
+웨이브 시작 → 적 등장 → [행동 선택] 버튼 →
+LLM이 3가지 선택지 생성 → 플레이어 투표(20초) →
+주사위 굴림(d20) → LLM이 결과 판정 → 투표 → 반복
+
+- Wave 1-4: Easy (일반 몬스터)
+- Wave 5: Mid-Boss (중간보스)
+- Wave 6-9: Hard (강화 몬스터)
+- Wave 10: Final Boss (최종보스)
 ```
 
-### 3. 전투 (즉시 판정)
+### 3. 행동 선택 시스템
 ```
-적 조우 → 자동 판정 → 결과 팝업 → LLM이 전투 결과를 턴제로 알려줌 → 탐험 계속
+| 타입 | 특성 | LLM 판정 경향 |
+|------|------|---------------|
+| aggressive | 공격적 | 높은 성공 시 큰 피해, 실패 시 역공 |
+| defensive | 방어적 | 안정적이나 낮은 피해량 |
+| tactical | 전술적 | 상황에 따라 유리한 결과 |
+| risky | 위험한 | 극단적 결과 (대박 또는 쪽박) |
+```
 
-판정 공식:
-결과 = (파티 전투력 / 적 전투력) × 랜덤(0.8~1.2)
+### 4. 주사위 시스템 (d20)
+```
+- 20 (크리티컬): 항상 perfect
+- 1 (펌블): 항상 defeat/wipe
+- 2-5: 대부분 실패
+- 6-10: 보통
+- 11-15: 성공
+- 16-19: 좋은 성공
 ```
 
-### 4. 탈출
+### 5. 투표 시스템
 ```
-- 포탈 도달 → 개별 탈출
-- 탈출한 장비만 저장
-- 죽으면 장비 드랍
+전투 후 → 계속 / 후퇴 선택 → 다수결 결정
+
+- 동점 시 호스트 결정권
+- 30초 타임아웃
+```
+
+### 6. 전투 결과
+```
+- perfect: 무피해 승리
+- victory: 일반 승리
+- narrow: 아슬아슬한 승리
+- defeat: 패배 (큰 피해)
+- wipe: 전멸 위기
 ```
 
 ## 폴더 구조
 
 ```
-dungeon-crawler/
+daily-dungeon/
 ├── client/
 │   ├── src/
-│   │   ├── phaser/
-│   │   │   ├── scenes/
-│   │   │   │   └── ExploreScene.ts
-│   │   │   └── config.ts
 │   │   ├── components/
 │   │   │   ├── Lobby/
-│   │   │   ├── HUD/
-│   │   │   └── Popup/
+│   │   │   │   ├── Home.tsx       # 메인 화면
+│   │   │   │   └── WaitingRoom.tsx # 대기실
+│   │   │   └── Battle/
+│   │   │       ├── BattleScreen.tsx # 전투 화면 (선택지/주사위 포함)
+│   │   │       ├── VoteScreen.tsx   # 투표 화면
+│   │   │       ├── ResultScreen.tsx # 결과 화면
+│   │   │       └── InventoryPanel.tsx # 인벤토리
 │   │   ├── hooks/
 │   │   │   └── useSocket.ts
-│   │   └── stores/
-│   │       └── gameStore.ts
+│   │   ├── stores/
+│   │   │   └── gameStore.ts       # Zustand 상태 관리
+│   │   └── styles/
+│   │       └── theme.ts           # 색상/스타일 정의
 ├── server/
 │   ├── src/
 │   │   ├── game/
-│   │   │   ├── Room.ts
-│   │   │   ├── Player.ts
-│   │   │   ├── Dungeon.ts
-│   │   │   └── Combat.ts      # 즉시 판정 로직
+│   │   │   ├── Room.ts            # 방 관리
+│   │   │   ├── Player.ts          # 플레이어 클래스
+│   │   │   ├── Combat.ts          # 전투 판정 + 주사위
+│   │   │   ├── enemies.ts         # EarthBound 스타일 적 + 보스
+│   │   │   └── items.ts           # 아이템 드롭 생성
 │   │   ├── ai/
-│   │   │   └── DungeonGenerator.ts
-│   │   ├── services/
-│   │   │   └── KeyService.ts  # 열쇠 관리
+│   │   │   └── combatNarrator.ts  # LLM 선택지 생성 + 전투 판정
 │   │   └── socket/
+│   │       └── handlers.ts        # Socket 이벤트 처리
 ├── shared/
-│   └── types.ts
-└── docs/
+│   └── types.ts                   # 공유 타입 정의
+└── CLAUDE.md
 ```
 
 ## Socket 이벤트
@@ -93,43 +122,41 @@ dungeon-crawler/
 |--------|------|------|
 | create-room | C→S | 방 생성 |
 | join-room | C→S | 방 참가 |
+| leave-room | C→S | 방 퇴장 |
+| room-created | S→C | 방 생성 완료 |
+| room-joined | S→C | 방 참가 완료 |
+| player-joined | S→C | 새 플레이어 입장 |
+| player-left | S→C | 플레이어 퇴장 |
+
+### 게임 진행
+| 이벤트 | 방향 | 설명 |
+|--------|------|------|
 | start-game | C→S | 게임 시작 |
+| game-started | S→C | 게임 시작됨 + 첫 웨이브 |
+| wave-start | S→C | 새 웨이브 시작 |
 
-### 탐험
+### 전투 (TTRPG 스타일)
 | 이벤트 | 방향 | 설명 |
 |--------|------|------|
-| player-move | C→S | 위치 업데이트 |
-| positions-update | S→C | 전체 위치 브로드캐스트 |
-| tile-revealed | S→C | 새 타일 공개 |
+| request-choices | C→S | 선택지 요청 |
+| choices-generated | S→C | LLM 생성 선택지 (3개) |
+| select-action | C→S | 행동 선택/투표 |
+| action-vote-update | S→C | 행동 투표 현황 |
+| dice-rolled | S→C | 주사위 결과 + 선택된 행동 |
+| combat-result | S→C | 전투 결과 + AI 내러티브 |
 
-### 전투 (즉시)
+### 투표
 | 이벤트 | 방향 | 설명 |
 |--------|------|------|
-| combat-result | S→C | 전투 결과 팝업 |
-
-### 아이템
-| 이벤트 | 방향 | 설명 |
-|--------|------|------|
-| item-pickup | C→S | 아이템 획득 시도 |
-| item-acquired | S→C | 아이템 획득 완료 |
+| vote-start | S→C | 투표 시작 |
+| player-vote | C→S | 투표 제출 |
+| vote-update | S→C | 투표 현황/결과 |
 
 ### 게임 종료
 | 이벤트 | 방향 | 설명 |
 |--------|------|------|
-| player-escaped | S→C | 플레이어 탈출 |
+| run-end | S→C | 런 종료 (탈출/전멸) |
 | player-died | S→C | 플레이어 사망 |
-| game-over | S→C | 게임 종료 |
-
-## 개발 우선순위
-
-1. 로비 + 방 시스템
-2. 탐험 모드 (맵 + 이동 + 동기화)
-3. 시야 시스템
-4. 즉시 판정 전투
-5. AI 던전 생성
-6. 아이템 + 인벤토리
-7. 열쇠 시스템 (Redis)
-8. 탈출/사망 처리
 
 ## 플랫폼 제약
 
@@ -137,14 +164,6 @@ dungeon-crawler/
 - 세로 화면
 - 한 손 조작
 - 10분 내 완료
-
-## 주의사항
-
-- Phaser 캔버스 위에 React UI 오버레이
-- 전투 UI는 React 팝업
-- 위치 동기화 100ms 제한
-- AI 호출 시 캐싱 필수
-- Redis로 열쇠/세션 관리
 
 ## 스타일링 규칙
 
@@ -167,3 +186,126 @@ backgroundColor: '#1a1a2e'                  // 하드코딩 색상
 style={styles.container}
 backgroundColor: theme.colors.bgDark
 ```
+
+---
+
+## 대규모 리팩토링 체크리스트
+
+대규모 구조 변경 시 반드시 확인:
+
+### 1. 파일 삭제 체크
+```
+□ 더 이상 사용하지 않는 파일 목록 작성
+□ import 관계 확인 (grep으로 검색)
+□ 파일 삭제 실행
+□ 빌드 테스트
+```
+
+### 2. 코드 정리
+```
+□ 미사용 export 제거
+□ 미사용 함수/변수 제거
+□ 타입 정의 업데이트 (shared/types.ts)
+```
+
+### 3. 문서 동기화
+```
+□ CLAUDE.md 업데이트
+□ 폴더 구조 섹션 수정
+□ Socket 이벤트 섹션 수정
+```
+
+### 4. 검증
+```
+□ npm run build --workspace=@daily-dungeon/client
+□ npm run build --workspace=@daily-dungeon/server
+□ npm run dev 실행 확인
+□ 주요 기능 수동 테스트
+```
+
+---
+
+## 서버 실행 트러블슈팅
+
+### 포트 충돌 (EADDRINUSE)
+```bash
+# 포트 3000 사용 중인 프로세스 확인 및 종료
+lsof -ti:3000 | xargs kill -9
+
+# 또는 특정 포트
+lsof -ti:5173 | xargs kill -9  # Vite 개발 서버
+```
+
+### 빌드 에러
+```bash
+# 클린 빌드
+rm -rf node_modules client/node_modules server/node_modules
+npm install
+npm run build
+```
+
+### Socket 연결 실패
+```bash
+# 서버가 실행 중인지 확인
+curl http://localhost:3000
+```
+
+---
+
+## 주의사항
+
+- 전투 UI는 React 컴포넌트로 구현
+- AI 호출 시 캐싱 필수 (30분 TTL)
+- Redis로 열쇠/세션 관리
+- EarthBound 스타일 유지 (유머러스한 적/묘사)
+- 보스 몬스터의 `abilities` 필드는 LLM이 서술적으로 활용 (코드 구현 불필요)
+
+---
+
+## 개발 주의사항 & 재발방지
+
+### 빌드 검증
+```bash
+# ❌ 전체 빌드 (shared 워크스페이스에 build 스크립트 없어서 실패)
+npm run build
+
+# ✅ 개별 워크스페이스 빌드
+npm run build --workspace=@daily-dungeon/client
+npm run build --workspace=@daily-dungeon/server
+```
+
+### LLM 의존 시스템 설계
+```
+✅ 반드시 폴백 로직 구현
+  - API 키 없을 때: 기본 선택지/판정 사용
+  - API 실패 시: 주사위 기반 단순 판정
+
+✅ 메타데이터 기반 설계
+  - 몬스터 abilities 필드: LLM이 해석하여 선택지/서술에 반영
+  - 코드로 능력 구현 X → 텍스트로 설명하면 LLM이 활용
+```
+
+### 상태 관리
+```
+✅ GameState 확장 시 전이 명확히 정의
+  - 'playing' → 'choosing' → 'rolling' → 'playing'
+  - 각 상태에서 어떤 UI가 표시되는지 App.tsx에서 관리
+
+✅ Socket 이벤트 추가 시
+  1. shared/types.ts에 페이로드 타입 정의
+  2. server/handlers.ts에 이벤트 핸들러 추가
+  3. client/useSocket.ts에 이벤트 리스너 추가
+  4. client/gameStore.ts에 상태 추가
+```
+
+---
+
+## 최근 변경 이력
+
+### 2026-02-05: 10웨이브 + TTRPG 선택지 시스템
+- 웨이브 수 3 → 10으로 확장
+- 중간보스(Wave 5), 최종보스(Wave 10) 추가
+- LLM 기반 전투 선택지 생성
+- d20 주사위 시스템 + 애니메이션
+- LLM 기반 전투 판정 (행동 + 주사위 → 결과)
+- 삭제: GAME_DESIGN.md (구 Phaser 기반 기획서)
