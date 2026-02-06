@@ -87,6 +87,7 @@ round-midnight/
 │   │   │   │   ├── DiceRoll.tsx       # 주사위 굴리기 (탭 인터랙션)
 │   │   │   │   ├── NarrationBox.tsx   # LLM 내러티브 표시
 │   │   │   │   ├── PartyStatus.tsx    # 파티 HP 바
+│   │   │   │   ├── SituationBox.tsx   # 상황 묘사 타이프라이터
 │   │   │   │   ├── RollResults.tsx    # 4인 주사위 결과 그리드
 │   │   │   │   ├── RunResult.tsx      # 런 종료 화면
 │   │   │   │   └── WaveEndChoice.tsx  # 계속/철수 투표
@@ -167,7 +168,7 @@ round-midnight/
 | `all-choices-ready` | S→C | 전원 선택 완료 |
 | `dice-roll` | C→S | 주사위 굴리기 탭 |
 | `roll-results` | S→C | 4명 주사위 결과 |
-| `wave-narrative` | S→C | LLM 결과 서술 |
+| `wave-narrative` | S→C | LLM 결과 서술 + partyStatus + enemyHp |
 | `wave-end` | S→C | 결과 + 계속/철수 |
 | `continue-or-retreat` | C→S | 계속 or 철수 |
 | `run-end` | S→C | 런 종료 결과 |
@@ -254,6 +255,10 @@ npm run build --workspace=@round-midnight/server
   - Vercel SPA 리라이트, Dockerfile 멀티스테이지 빌드
   - Vite chunk splitting, 반응형 폰트, 가로 모드 차단
   - 디자인 토큰 CSS 변수, OG 메타 태그
+- [x] **Phase 5**: 전투 화면 가독성 + UX 개선
+  - 폰트 사이즈 전면 확대 (레트로 픽셀 폰트 가독성)
+  - SituationBox 타이프라이터 연출 (한 글자씩 출력 + 탭 스킵)
+  - 체력 실시간 반영 (WAVE_NARRATIVE에서 즉시 HP 갱신)
 
 ## 문서
 

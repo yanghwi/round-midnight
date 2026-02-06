@@ -80,7 +80,7 @@ round-midnight/
 ├── client/src/
 │   ├── components/
 │   │   ├── Lobby/             # LobbyScreen, CharacterSetup
-│   │   └── Battle/            # BattleScreen, DiceRoll, NarrationBox 등 9개
+│   │   └── Battle/            # BattleScreen, SituationBox, DiceRoll, NarrationBox 등 10개
 │   ├── assets/
 │   │   ├── sprites/           # box-shadow 픽셀아트 (5종)
 │   │   ├── backgrounds/       # CSS gradient 배경 (5종)
@@ -113,7 +113,8 @@ round-midnight/
 - [x] **Phase 1**: 프로젝트 셋업 + 로비 + 캐릭터 설정
 - [x] **Phase 2**: 전투 코어 루프 (하드코딩 데이터)
 - [x] **Phase 3**: LLM 연동 (상황/내러티브/하이라이트 동적 생성 + 폴백)
-- [ ] **Phase 4**: 비주얼 에셋 + 배포 + 모바일 최적화
+- [x] **Phase 4**: 비주얼 에셋 + 배포 + 모바일 최적화
+- [x] **Phase 5**: 전투 화면 가독성 + UX 개선
 
 ## 문서
 
