@@ -44,7 +44,7 @@ app.use('/api/auth', discordRoutes);
 setupSocketHandlers(io);
 
 // 프로덕션: 클라이언트 정적 파일 서빙
-const clientDist = path.resolve('client/dist');
+const clientDist = path.resolve('../client/dist');
 app.use(express.static(clientDist));
 // SPA 폴백: API/소켓이 아닌 모든 GET → index.html
 app.get('*', (_req, res) => {
