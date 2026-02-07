@@ -83,7 +83,7 @@ round-midnight/
 │   │   ├── Lobby/             # LobbyScreen, CharacterSetup
 │   │   └── Battle/            # BattleScreen, MaintenanceScreen, SituationBox, DiceRoll 등 11개
 │   ├── assets/
-│   │   ├── sprites/           # box-shadow 픽셀아트 (5종, scale 5~7)
+│   │   ├── sprites/           # box-shadow 픽셀아트 (10종, scale 5~7)
 │   │   ├── backgrounds/       # 스테이지 기반 CSS gradient 배경 (기본+중보스+최종보스)
 │   │   └── effects/           # 전투 이펙트 (5종)
 │   ├── hooks/useSocket.ts
@@ -123,7 +123,7 @@ round-midnight/
 - [x] **Phase A**: 기반 정비 (장비 효과, 재접속, 투표 UI, 스프라이트/배경 개편)
 - [x] **Phase B**: 아이템 시스템 (106종 카탈로그 + 인벤토리 + 임시 버프)
 - [x] **Phase B-feedback**: 전투 흐름 개편 (멀티라운드 전투, 정비 세션, HP 밸런스, 스프라이트 센터링)
-- [ ] **Phase C**: 보스 몬스터 시스템 (Wave 5 중보스, Wave 10 최종보스)
+- [x] **Phase C**: 보스 몬스터 시스템 (Wave 6~10 적 + 최종보스 + 보스 드랍 + 스프라이트)
 - [ ] **Phase D**: DB + 영속성 (Prisma + PostgreSQL)
 - [ ] **Phase E**: Discord OAuth2 인증
 - [ ] **Phase F**: 캐릭터 생성 리뉴얼 (픽셀아트 조합)
