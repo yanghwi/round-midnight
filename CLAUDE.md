@@ -21,21 +21,32 @@
 ## 코어 루프
 
 ```
-웨이브 시작
+웨이브 시작 (새 적 조우)
   → LLM이 상황 묘사 + 4명 각자에게 서로 다른 선택지 생성
-  → 4명 동시에 선택지 고름 (10초)
-  → 4명 동시에 d20 주사위 굴림
-  → LLM이 "4명의 선택 + 4개의 주사위" 조합으로 전투 서술
-  → 데미지 계산 → 계속/철수 투표
+  → 전투 라운드 루프:
+    → 4명 동시에 선택지 고름 (10초)
+    → 4명 동시에 d20 주사위 굴림
+    → LLM이 "4명의 선택 + 4개의 주사위" 조합으로 전투 서술
+    → 적 생존 시: 선택지만 재생성 → 루프 반복
+    → 적 사망 시: 전리품 표시 (3초) → 정비 세션
+  → 정비 세션: 장비 관리 + 계속/철수 투표 (45초)
   → 다음 웨이브 또는 런 종료
 ```
 
 ## RunPhase 상태 머신
 
 ```
-waiting → character_setup → wave_intro → choosing → rolling → narrating → wave_result → run_end
-                                ↑                                    │
-                                └────────────────────────────────────┘ (다음 웨이브)
+waiting → character_setup → wave_intro → choosing → rolling → narrating
+                                ↑            ↑                    │
+                                │            └────────────────────┘ (적 생존: 선택지만 재생성)
+                                │                                 │ (적 사망)
+                                │                            wave_result (전리품 표시, 3초)
+                                │                                 ↓
+                                │                            maintenance (장비 관리 + 투표)
+                                │                                 │
+                                └─────────────────────────────────┘ (계속 → 다음 웨이브)
+                                                                  ↓
+                                                               run_end
 ```
 
 | Phase | 설명 | UI |
@@ -46,7 +57,8 @@ waiting → character_setup → wave_intro → choosing → rolling → narratin
 | `choosing` | 4명이 선택지 고르는 중 | ChoiceCards |
 | `rolling` | 4명이 주사위 굴리는 중 | DiceRoll |
 | `narrating` | LLM이 결과 서술 중 | NarrationBox |
-| `wave_result` | 결과 표시 + 계속/철수 선택 | WaveEndChoice |
+| `wave_result` | 전리품 표시 (3초) | WaveEndChoice |
+| `maintenance` | 장비 관리 + 계속/철수 투표 | MaintenanceScreen |
 | `run_end` | 런 종료 (철수/전멸/클리어) | RunResult |
 
 ## 캐릭터 시스템
@@ -88,11 +100,13 @@ round-midnight/
 │   │   │   │   ├── NarrationBox.tsx   # LLM 내러티브 표시
 │   │   │   │   ├── PartyStatus.tsx    # 파티 HP 바
 │   │   │   │   ├── SituationBox.tsx   # 상황 묘사 타이프라이터
+│   │   │   │   ├── MaintenanceScreen.tsx # 정비 세션 (장비 관리 + 투표)
 │   │   │   │   ├── RollResults.tsx    # 4인 주사위 결과 그리드
 │   │   │   │   ├── RunResult.tsx      # 런 종료 화면
-│   │   │   │   └── WaveEndChoice.tsx  # 계속/철수 투표
+│   │   │   │   └── WaveEndChoice.tsx  # 전리품 표시 (3초)
 │   │   │   └── Lobby/
-│   │   │       ├── LobbyScreen.tsx    # 홈(방 생성/참가) + 대기실
+│   │   │       ├── LobbyScreen.tsx    # 홈(방 생성/참가) + 대기실 + 캐릭터 패널
+│   │   │       ├── LobbyBg.tsx        # 로비 배경
 │   │   │       └── CharacterSetup.tsx # 캐릭터 이름/배경 선택
 │   │   ├── hooks/
 │   │   │   └── useSocket.ts           # Socket.io 이벤트 리스너/에미터
@@ -114,9 +128,21 @@ round-midnight/
 │       │   ├── prompts.ts            # LLM 시스템 프롬프트
 │       │   └── situationGenerator.ts  # 상황/선택지 생성
 │       ├── game/
-│       │   ├── data/hardcodedData.ts  # LLM 폴백 하드코딩 데이터
+│       │   ├── data/
+│       │   │   ├── hardcodedData.ts   # LLM 폴백 하드코딩 데이터
+│       │   │   └── items/             # 아이템 카탈로그 (106종)
+│       │   │       ├── index.ts       # getItemById, getAllItems
+│       │   │       ├── weapons.ts     # 무기 30종
+│       │   │       ├── tops.ts        # 상의 15종
+│       │   │       ├── bottoms.ts     # 하의 8종
+│       │   │       ├── hats.ts        # 모자 8종
+│       │   │       ├── accessories.ts # 악세서리 25종
+│       │   │       └── consumables.ts # 소모품 20종
 │       │   ├── DamageCalculator.ts    # 데미지 계산 엔진
 │       │   ├── DiceEngine.ts          # d20 주사위 + 보정 계산
+│       │   ├── InventoryManager.ts    # 장착/해제/사용/버리기 + 20칸 제한
+│       │   ├── ItemEffectResolver.ts  # 장착 효과 + 임시 버프 집계
+│       │   ├── LootEngine.ts          # 가중 랜덤 드랍 생성
 │       │   ├── Player.ts             # createCharacter + applyBackground
 │       │   ├── Room.ts               # RoomManager (phase 상태 머신)
 │       │   └── WaveManager.ts        # 웨이브 진행 관리
@@ -169,10 +195,21 @@ round-midnight/
 | `dice-roll` | C→S | 주사위 굴리기 탭 |
 | `roll-results` | S→C | 4명 주사위 결과 |
 | `wave-narrative` | S→C | LLM 결과 서술 + partyStatus + enemyHp |
-| `wave-end` | S→C | 결과 + 계속/철수 |
+| `wave-end` | S→C | 전리품 표시 (적 사망 시) |
+| `combat-choices` | S→C | 적 생존 시 다음 라운드 선택지 |
+| `maintenance-start` | S→C | 정비 세션 시작 (장비 관리 + 투표) |
 | `vote-update` | S→C | 투표 현황 (continueCount, retreatCount, total) |
-| `continue-or-retreat` | C→S | 계속 or 철수 |
+| `continue-or-retreat` | C→S | 계속 or 철수 (maintenance phase) |
 | `run-end` | S→C | 런 종료 결과 |
+
+### 아이템/인벤토리
+| 이벤트 | 방향 | 설명 |
+|--------|------|------|
+| `equip-item` | C→S | 아이템 장착 |
+| `unequip-item` | C→S | 아이템 해제 |
+| `use-consumable` | C→S | 소모품 사용 |
+| `discard-item` | C→S | 아이템 버리기 |
+| `inventory-updated` | S→C | 인벤토리/장비/버프 변경 알림 |
 
 ## 스타일링 규칙
 
@@ -248,6 +285,12 @@ npm run build --workspace=@round-midnight/server
 - **새 파일 import 확인**: 기존 코드가 존재하지 않는 모듈을 import하고 있을 수 있음 (예: `logger.ts` 누락). 빌드 검증 필수
 - **배경 데이터**: `getWaveBackground(waveNumber, isBoss, bossType)`으로 배경 선택. `client/src/assets/backgrounds/backgroundData.ts`
 
+### 아이템 효과 시스템
+- **단일 진실 소스**: 장비 보너스는 `ItemEffectResolver.resolveEquippedEffects()`가 집계한 `ResolvedEffects`를 사용. `character.equipment.weaponBonus`를 직접 읽지 말 것
+- **DiceEngine.calculateBonus(character, category, resolved?)**: `resolved`가 있으면 집계된 보너스 사용, 없으면 기존 character.equipment에서 직접 읽기 (하위 호환)
+- **소모품 임시 버프**: `useConsumable()` → `activeBuffs`에 `remainingWaves: 1`로 추가 → `resolveEquippedEffects()`에서 집계 → 웨이브 종료 시 `expireBuffs()`로 만료
+- **인벤토리 제한**: `GAME_CONSTANTS.MAX_RUN_INVENTORY = 20`, 초과 시 `addItemToInventory()` 원래 객체 반환, `LootItem.inventoryFull` 플래그로 UI 알림
+
 ### 플랫폼 제약
 - 아이폰 사파리 세로 화면
 - 한 손 엄지 조작
@@ -272,7 +315,20 @@ npm run build --workspace=@round-midnight/server
   - 투표 현황 실시간 표시 (VOTE_UPDATE 이벤트)
   - 몬스터 스프라이트 확대 (scale 3→5~6, 보스 7+)
   - 스테이지 배경 시스템 개편 (통일 배경 + 보스 전용 배경)
-- [ ] **Phase B**: 아이템 시스템 + 루트 메카닉 (100종 아이템 카탈로그)
+- [x] **Phase B**: 아이템 시스템 + 루트 메카닉 (106종 아이템 카탈로그)
+  - 5슬롯 장비 (weapon/top/bottom/hat/accessory) + 소모품
+  - ItemEffectResolver → ResolvedEffects 집계 (장비 + 임시 버프)
+  - 인벤토리 20칸 제한 + 아이템 버리기 (DISCARD_ITEM)
+  - 소모품 임시 버프 (TemporaryBuff, 웨이브 종료 시 만료)
+  - LootEngine 가중 랜덤 드랍 + 웨이브/보스 보정
+- [x] **Phase B-feedback**: 전투 흐름 개편 + UX 개선
+  - 멀티라운드 전투 (적 생존 시 선택지만 재생성, 상황 묘사 생략)
+  - 정비 세션 분리 (wave_result → 전리품 3초 → maintenance → 장비 관리 + 투표)
+  - 스프라이트 센터링 보정 (visualWidth/Height + translate 오프셋)
+  - HP 밸런스 (플레이어 100→60, 적 스탯 비례 하향)
+  - 배경 톤 다운 (opacity/speed 대폭 감소)
+  - 로비 캐릭터 패널 (인벤토리/장비 조회)
+  - 적 사망 시 즉시 스프라이트 소멸
 - [ ] **Phase C**: 보스 몬스터 시스템 (Wave 5 중보스 + Wave 10 최종보스)
 - [ ] **Phase D**: DB + 영속성 (Prisma + PostgreSQL)
 - [ ] **Phase E**: Discord OAuth2 인증

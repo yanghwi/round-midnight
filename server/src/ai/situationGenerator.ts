@@ -1,6 +1,6 @@
-import type { Character, PlayerChoiceSet, Enemy } from '@round-midnight/shared';
+import type { Character, PlayerChoiceSet, Enemy, PlayerAction } from '@round-midnight/shared';
 import { callClaude } from './client.js';
-import { SITUATION_SYSTEM, buildSituationMessage } from './prompts.js';
+import { SITUATION_SYSTEM, COMBAT_CHOICES_SYSTEM, buildSituationMessage, buildCombatChoicesMessage } from './prompts.js';
 import {
   WAVE_TEMPLATES,
   scaleEnemy,
@@ -73,7 +73,7 @@ function parseLLMSituation(
           name: llm.enemy.name || template.enemy.name,
           description: llm.enemy.description || template.enemy.description,
           defense: template.enemy.defense,
-          imageTag: llm.enemy.imageTag || template.enemy.imageTag,
+          imageTag: VALID_IMAGE_TAGS.has(llm.enemy.imageTag) ? llm.enemy.imageTag : template.enemy.imageTag,
         },
       },
       players.length,
@@ -120,16 +120,74 @@ function buildFallback(template: WaveTemplate, players: Character[]): SituationR
   return { enemy, situation: template.situation, playerChoiceSets };
 }
 
-function buildPlayerFallback(player: Character, template: WaveTemplate): PlayerChoiceSet {
+function buildPlayerFallback(player: Character, template: WaveTemplate, combatRound: number = 1): PlayerChoiceSet {
   const bgChoices = template.choicesByBackground[player.background] ?? template.defaultChoices;
   const options: ChoiceOption[] = bgChoices.map((c, i) => ({
-    id: `${player.id}-choice-${i}`,
+    id: `${player.id}-r${combatRound}-${i}`,
     text: c.text,
     category: c.category,
     baseDC: c.baseDC,
   }));
   return { playerId: player.id, options };
 }
+
+interface LLMCombatChoicesResponse {
+  playerChoices: {
+    playerId: string;
+    options: { id: string; text: string; category: string; baseDC: number }[];
+  }[];
+}
+
+/**
+ * 멀티라운드 전투: 선택지만 재생성 (상황/적은 기존 유지)
+ */
+export async function generateCombatChoices(
+  situation: string,
+  enemy: Enemy,
+  combatRound: number,
+  waveNumber: number,
+  alivePlayers: Character[],
+  previousActions?: PlayerAction[],
+): Promise<Map<string, PlayerChoiceSet>> {
+  const waveIndex = Math.min(waveNumber - 1, WAVE_TEMPLATES.length - 1);
+  const template = WAVE_TEMPLATES[waveIndex];
+
+  // LLM 시도
+  const userMessage = buildCombatChoicesMessage(
+    situation, enemy.name, enemy.hp, enemy.maxHp, combatRound, alivePlayers, previousActions,
+  );
+  const llmResult = await callClaude<LLMCombatChoicesResponse>(COMBAT_CHOICES_SYSTEM, userMessage);
+
+  if (llmResult && llmResult.playerChoices) {
+    const choiceSets = new Map<string, PlayerChoiceSet>();
+    for (const player of alivePlayers) {
+      const llmChoices = llmResult.playerChoices.find((pc) => pc.playerId === player.id);
+      if (llmChoices && llmChoices.options.length >= 2) {
+        const options: ChoiceOption[] = llmChoices.options.map((opt, i) => ({
+          id: opt.id || `${player.id}-r${combatRound}-${i}`,
+          text: opt.text,
+          category: validateCategory(opt.category),
+          baseDC: clampDC(opt.baseDC),
+        }));
+        choiceSets.set(player.id, { playerId: player.id, options });
+      } else {
+        choiceSets.set(player.id, buildPlayerFallback(player, template, combatRound));
+      }
+    }
+    console.log(`[AI] Combat round ${combatRound} 선택지 생성 성공 (LLM)`);
+    return choiceSets;
+  }
+
+  // 폴백: 하드코딩 선택지 셔플
+  console.log(`[AI] Combat round ${combatRound} 선택지 생성 폴백 (하드코딩)`);
+  const choiceSets = new Map<string, PlayerChoiceSet>();
+  for (const player of alivePlayers) {
+    choiceSets.set(player.id, buildPlayerFallback(player, template, combatRound));
+  }
+  return choiceSets;
+}
+
+const VALID_IMAGE_TAGS = new Set(['raccoon', 'vending-machine', 'shadow-cats', 'cleaning-robot', 'market-boss']);
 
 const VALID_CATEGORIES = new Set(['physical', 'social', 'technical', 'defensive', 'creative']);
 

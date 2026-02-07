@@ -13,6 +13,9 @@ import type {
   WaveNarrativePayload,
   WaveEndPayload,
   RunEndPayload,
+  InventoryUpdatedPayload,
+  CombatChoicesPayload,
+  MaintenanceStartPayload,
 } from '@round-midnight/shared';
 import { SOCKET_EVENTS } from '@round-midnight/shared';
 
@@ -31,11 +34,14 @@ export function useSocket() {
     setError,
     setPhase,
     setWaveIntro,
+    setCombatChoices,
+    setMaintenanceStart,
     setAllActions,
     setNarrative,
     setWaveEnd,
     setRunEnd,
     setVoteStatus,
+    setInventoryUpdate,
     resetGame,
   } = useGameStore();
 
@@ -141,6 +147,19 @@ export function useSocket() {
       }
     });
 
+    socket.on(SOCKET_EVENTS.COMBAT_CHOICES, (data: CombatChoicesPayload) => {
+      const store = useGameStore.getState();
+      const myChoices = data.playerChoices.find((pc) => pc.playerId === store.player?.id)
+        ?? data.playerChoices[0];
+      if (myChoices) {
+        setCombatChoices(data.combatRound, myChoices);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.MAINTENANCE_START, (data: MaintenanceStartPayload) => {
+      setMaintenanceStart(data);
+    });
+
     socket.on(SOCKET_EVENTS.PHASE_CHANGE, (data: { phase: RunPhase }) => {
       setPhase(data.phase);
     });
@@ -167,6 +186,12 @@ export function useSocket() {
 
     socket.on(SOCKET_EVENTS.RUN_END, (data: RunEndPayload) => {
       setRunEnd(data);
+    });
+
+    // ===== 인벤토리 =====
+
+    socket.on(SOCKET_EVENTS.INVENTORY_UPDATED, (data: InventoryUpdatedPayload) => {
+      setInventoryUpdate(data);
     });
 
     // ===== 에러 =====
@@ -216,6 +241,22 @@ export function useSocket() {
     socketRef.current?.emit(SOCKET_EVENTS.CONTINUE_OR_RETREAT, { decision });
   };
 
+  const equipItem = (itemId: string) => {
+    socketRef.current?.emit(SOCKET_EVENTS.EQUIP_ITEM, { itemId });
+  };
+
+  const unequipItem = (itemId: string) => {
+    socketRef.current?.emit(SOCKET_EVENTS.UNEQUIP_ITEM, { itemId });
+  };
+
+  const useConsumable = (itemId: string) => {
+    socketRef.current?.emit(SOCKET_EVENTS.USE_CONSUMABLE, { itemId });
+  };
+
+  const discardItem = (itemId: string) => {
+    socketRef.current?.emit(SOCKET_EVENTS.DISCARD_ITEM, { itemId });
+  };
+
   return {
     socket: socketRef.current,
     createRoom,
@@ -226,5 +267,9 @@ export function useSocket() {
     submitChoice,
     rollDice,
     voteContinueOrRetreat,
+    equipItem,
+    unequipItem,
+    useConsumable,
+    discardItem,
   };
 }

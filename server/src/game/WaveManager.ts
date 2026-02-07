@@ -17,9 +17,12 @@ import { calculateDamage, applyDamageToPlayers } from './DamageCalculator.js';
 import {
   NEXT_WAVE_PREVIEWS,
 } from './data/hardcodedData.js';
-import { generateSituation } from '../ai/situationGenerator.js';
+import { generateSituation, generateCombatChoices } from '../ai/situationGenerator.js';
 import { generateNarrative } from '../ai/narrativeGenerator.js';
 import { generateHighlights } from '../ai/highlightsGenerator.js';
+import { resolveEquippedEffects, getDcReduction } from './ItemEffectResolver.js';
+import { generateLootFromCatalog, itemDefToLootItem } from './LootEngine.js';
+import { addItemToInventory, toDisplayInventory } from './InventoryManager.js';
 import { logger } from '../logger.js';
 
 interface PendingChoice {
@@ -39,10 +42,13 @@ export class WaveManager {
   private actions: PlayerAction[] = [];
   private votes: Map<string, 'continue' | 'retreat'> = new Map();
 
+  private combatRound: number = 0;
+
   private choiceTimer: ReturnType<typeof setTimeout> | null = null;
   private rollTimer: ReturnType<typeof setTimeout> | null = null;
   private voteTimer: ReturnType<typeof setTimeout> | null = null;
   private introTimer: ReturnType<typeof setTimeout> | null = null;
+  private maintenanceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(roomCode: string, io: Server) {
     this.roomCode = roomCode;
@@ -56,15 +62,25 @@ export class WaveManager {
   /**
    * 웨이브 시작: LLM으로 상황 생성 → 선택지 배분 → wave_intro emit → 2초 후 choosing
    */
-  async startWave(room: Room, retryEnemy?: Enemy): Promise<void> {
+  async startWave(room: Room): Promise<void> {
     const waveNumber = room.run?.currentWave ?? 1;
     const alivePlayers = room.players.filter((p) => p.isAlive);
 
     // 상태 초기화
+    this.combatRound = 1;
     this.pendingChoices.clear();
     this.pendingRolls.clear();
     this.actions = [];
     this.votes.clear();
+
+    // wave_heal 효과 적용 (웨이브 시작 시 힐)
+    for (const player of alivePlayers) {
+      const resolved = resolveEquippedEffects(player);
+      if (resolved.waveHealAmount > 0) {
+        player.hp = Math.min(player.maxHp, player.hp + resolved.waveHealAmount);
+      }
+    }
+    roomManager.updatePlayers(this.roomCode, room.players);
 
     // phase → wave_intro (LLM 호출 동안 로딩 표시)
     roomManager.setPhase(this.roomCode, 'wave_intro');
@@ -77,8 +93,7 @@ export class WaveManager {
       alivePlayers,
     );
 
-    // retry 시 기존 적 유지, 새 상황/선택지만 재생성
-    this.currentEnemy = retryEnemy ?? result.enemy;
+    this.currentEnemy = result.enemy;
     this.currentSituation = result.situation;
     this.playerChoiceSets = result.playerChoiceSets;
 
@@ -103,6 +118,54 @@ export class WaveManager {
         this.autoFillChoices(room);
       }, GAME_CONSTANTS.CHOICE_TIMEOUT);
     }, 1000);
+  }
+
+  /**
+   * 멀티라운드 전투: 적 생존 시 선택지만 재생성 → choosing 전환
+   */
+  async continueCombat(room: Room): Promise<void> {
+    this.combatRound++;
+    const alivePlayers = room.players.filter((p) => p.isAlive);
+
+    // 상태 초기화 (선택/굴림만)
+    this.pendingChoices.clear();
+    this.pendingRolls.clear();
+    const previousActions = [...this.actions];
+    this.actions = [];
+
+    // wave_heal 적용
+    for (const player of alivePlayers) {
+      const resolved = resolveEquippedEffects(player);
+      if (resolved.waveHealAmount > 0) {
+        player.hp = Math.min(player.maxHp, player.hp + resolved.waveHealAmount);
+      }
+    }
+    roomManager.updatePlayers(this.roomCode, room.players);
+
+    // 선택지만 재생성 (상황/적은 기존 유지)
+    const waveNumber = room.run?.currentWave ?? 1;
+    const newChoices = await generateCombatChoices(
+      this.currentSituation, this.currentEnemy!, this.combatRound,
+      waveNumber, alivePlayers, previousActions,
+    );
+    this.playerChoiceSets = newChoices;
+
+    // COMBAT_CHOICES emit → choosing
+    for (const player of alivePlayers) {
+      const myChoices = this.playerChoiceSets.get(player.id);
+      this.io.to(player.socketId).emit(SOCKET_EVENTS.COMBAT_CHOICES, {
+        combatRound: this.combatRound,
+        playerChoices: myChoices ? [myChoices] : [],
+      });
+    }
+
+    roomManager.setPhase(this.roomCode, 'choosing');
+    this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'choosing' });
+
+    // 10초 선택 타이머
+    this.choiceTimer = setTimeout(() => {
+      this.autoFillChoices(room);
+    }, GAME_CONSTANTS.CHOICE_TIMEOUT);
   }
 
   /**
@@ -138,29 +201,28 @@ export class WaveManager {
 
     this.pendingRolls.set(playerId, true);
 
-    // 악세서리 효과: reroll — N번 굴려서 최고값 사용
+    // 장착 아이템 효과 집계
+    const resolved = resolveEquippedEffects(player);
+
+    // reroll — N번 굴려서 최고값 사용
     let roll = rollDice();
-    if (player.equipment.accessoryEffect.type === 'reroll') {
-      for (let i = 0; i < player.equipment.accessoryEffect.count; i++) {
-        roll = Math.max(roll, rollDice());
-      }
+    for (let i = 0; i < resolved.rerollCount; i++) {
+      roll = Math.max(roll, rollDice());
     }
 
-    const bonus = calculateBonus(player, pending.choice.category);
+    const bonus = calculateBonus(player, pending.choice.category, resolved);
 
-    // 악세서리 효과: min_raise
-    let finalRoll = roll;
-    if (player.equipment.accessoryEffect.type === 'min_raise') {
-      finalRoll = Math.max(roll, player.equipment.accessoryEffect.minValue);
-    }
+    // min_raise — 최소 주사위 값 보장
+    let finalRoll = resolved.minRaise > 0 ? Math.max(roll, resolved.minRaise) : roll;
+
+    // dc_reduction — 카테고리별 DC 감소
+    const dcReduction = getDcReduction(resolved, pending.choice.category);
+    const adjustedDC = Math.max(1, pending.choice.baseDC - dcReduction);
 
     const effectiveRoll = finalRoll + bonus;
 
-    // 악세서리 효과: crit_expand — critical 판정 기준 감소 (기본 5 → critMin)
-    const critMin = player.equipment.accessoryEffect.type === 'crit_expand'
-      ? player.equipment.accessoryEffect.critMin
-      : 5;
-    const tier = determineTier(finalRoll, effectiveRoll, pending.choice.baseDC, critMin);
+    // crit_expand — critical 판정 기준
+    const tier = determineTier(finalRoll, effectiveRoll, adjustedDC, resolved.critMin);
 
     const action: PlayerAction = {
       playerId: player.id,
@@ -216,6 +278,7 @@ export class WaveManager {
     this.clearTimer('choice');
     this.clearTimer('roll');
     this.clearTimer('vote');
+    this.clearTimer('maintenance');
   }
 
   // ── Private ──
@@ -240,8 +303,17 @@ export class WaveManager {
   private async resolveWave(room: Room): Promise<void> {
     if (!this.currentEnemy || !room.run) return;
 
-    // 1. 데미지 계산
-    const damageResult = calculateDamage(this.actions, this.currentEnemy);
+    // 1. 데미지 계산 (플레이어별 damage_multiplier 집계)
+    const playerMultipliers = new Map<string, { damageMultiplier: number; bossDamageMultiplier: number }>();
+    for (const player of room.players.filter((p) => p.isAlive)) {
+      const resolved = resolveEquippedEffects(player);
+      playerMultipliers.set(player.id, {
+        damageMultiplier: resolved.damageMultiplier,
+        bossDamageMultiplier: resolved.bossDamageMultiplier,
+      });
+    }
+    const isBossWave = (room.run?.currentWave ?? 1) % 5 === 0;
+    const damageResult = calculateDamage(this.actions, this.currentEnemy, playerMultipliers, isBossWave);
 
     // 2. 적 HP 감소
     this.currentEnemy.hp = Math.max(0, this.currentEnemy.hp - damageResult.enemyDamage);
@@ -280,9 +352,22 @@ export class WaveManager {
       enemyHp: this.currentEnemy!.hp,
     });
 
-    // 7. 1.5초 후 WAVE_END → wave_result
+    // 7. 버프 만료 처리
+    this.expireBuffs();
+
+    // 8. 1.5초 후 분기: 적 생존 → continueCombat, 적 사망 → emitWaveEnd
     setTimeout(() => {
-      this.emitWaveEnd(room, damageResult);
+      const refreshedRoom2 = roomManager.getRoom(this.roomCode);
+      if (!refreshedRoom2) return;
+
+      if (this.currentEnemy && this.currentEnemy.hp > 0) {
+        // 적 생존 → 다음 전투 라운드
+        this.continueCombat(refreshedRoom2).catch((err) =>
+          logger.error('continueCombat failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
+      } else {
+        // 적 사망 → 전리품 + 정비
+        this.emitWaveEnd(refreshedRoom2, damageResult);
+      }
     }, 1500);
   }
 
@@ -292,9 +377,40 @@ export class WaveManager {
     const refreshedRoom = roomManager.getRoom(this.roomCode);
     if (!refreshedRoom) return;
 
-    // 루트 누적
-    if (damageResult.loot.length > 0 && refreshedRoom.run) {
-      refreshedRoom.run.accumulatedLoot.push(...damageResult.loot);
+    // 적은 항상 사망 상태에서 이 함수가 호출됨
+    const waveNumber = refreshedRoom.run?.currentWave ?? 1;
+    const isBoss = waveNumber % 5 === 0;
+
+    // 루트 생성 + 자동 분배
+    if (refreshedRoom.run) {
+      const alivePlrs = refreshedRoom.players.filter((p) => p.isAlive);
+      const lootItems = generateLootFromCatalog(alivePlrs.length, { waveNumber, isBossWave: isBoss });
+      const lootList = lootItems.map(itemDefToLootItem);
+      damageResult.loot = lootList;
+      refreshedRoom.run.accumulatedLoot.push(...lootList);
+
+      // 자동 분배: 각 플레이어에게 1개씩
+      for (let i = 0; i < Math.min(alivePlrs.length, lootList.length); i++) {
+        const player = alivePlrs[i];
+        const loot = lootList[i];
+        loot.assignedTo = player.name;
+
+        if (player.inventory.length >= GAME_CONSTANTS.MAX_RUN_INVENTORY) {
+          loot.inventoryFull = true;
+          continue;
+        }
+
+        const updated = addItemToInventory(player, loot.itemId);
+        roomManager.updateCharacter(this.roomCode, updated);
+
+        this.io.to(player.socketId).emit(SOCKET_EVENTS.INVENTORY_UPDATED, {
+          inventory: toDisplayInventory(updated.inventory),
+          equipment: updated.equipment,
+          hp: updated.hp,
+          maxHp: updated.maxHp,
+          activeBuffs: updated.activeBuffs,
+        });
+      }
     }
 
     // 웨이브 히스토리 기록
@@ -312,7 +428,6 @@ export class WaveManager {
 
     const alivePlayers = refreshedRoom.players.filter((p) => p.isAlive);
     const allDead = alivePlayers.length === 0;
-    const waveNumber = refreshedRoom.run?.currentWave ?? 1;
     const isLastWave = waveNumber >= (refreshedRoom.run?.maxWaves ?? GAME_CONSTANTS.MAX_WAVES);
 
     // 전멸 → 바로 run_end
@@ -322,13 +437,12 @@ export class WaveManager {
     }
 
     // 클리어 (마지막 웨이브 + 적 격파)
-    if (isLastWave && damageResult.enemyDefeated) {
+    if (isLastWave) {
       this.endRun(refreshedRoom, 'clear').catch((err) => logger.error('endRun failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
       return;
     }
 
-    // 계속/철수 투표
-    const canContinue = damageResult.enemyDefeated;
+    // wave_result: 전리품 표시 (3초)
     const partyStatus = refreshedRoom.players.map((p) => ({
       playerId: p.id,
       name: p.name,
@@ -339,7 +453,6 @@ export class WaveManager {
     const nextPreview = NEXT_WAVE_PREVIEWS[Math.min(waveNumber, NEXT_WAVE_PREVIEWS.length - 1)];
 
     const payload: WaveEndPayload = {
-      canContinue,
       partyStatus,
       loot: damageResult.loot,
       nextWavePreview: nextPreview || undefined,
@@ -349,17 +462,40 @@ export class WaveManager {
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.WAVE_END, payload);
     this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'wave_result' });
 
-    if (!canContinue) {
-      // 적 생존 → 5초 후 자동 계속 (같은 적 재도전)
-      this.voteTimer = setTimeout(() => {
-        this.autoVoteContinue(refreshedRoom);
-      }, 5000);
-    } else {
-      // 적 격파 → 30초 투표 타이머
-      this.voteTimer = setTimeout(() => {
-        this.autoVoteContinue(refreshedRoom);
-      }, GAME_CONSTANTS.VOTE_TIMEOUT);
-    }
+    // 3초 후 maintenance 전환
+    this.maintenanceTimer = setTimeout(() => {
+      this.transitionToMaintenance(refreshedRoom);
+    }, 3000);
+  }
+
+  private transitionToMaintenance(room: Room): void {
+    const refreshedRoom = roomManager.getRoom(this.roomCode);
+    if (!refreshedRoom) return;
+
+    this.votes.clear();
+
+    const partyStatus = refreshedRoom.players.map((p) => ({
+      playerId: p.id,
+      name: p.name,
+      hp: p.hp,
+      maxHp: p.maxHp,
+    }));
+
+    const waveNumber = refreshedRoom.run?.currentWave ?? 1;
+    const nextPreview = NEXT_WAVE_PREVIEWS[Math.min(waveNumber, NEXT_WAVE_PREVIEWS.length - 1)];
+
+    roomManager.setPhase(this.roomCode, 'maintenance');
+    this.io.to(this.roomCode).emit(SOCKET_EVENTS.MAINTENANCE_START, {
+      partyStatus,
+      loot: refreshedRoom.run?.accumulatedLoot ?? [],
+      nextWavePreview: nextPreview || undefined,
+    });
+    this.io.to(this.roomCode).emit(SOCKET_EVENTS.PHASE_CHANGE, { phase: 'maintenance' });
+
+    // 45초 투표 타이머
+    this.voteTimer = setTimeout(() => {
+      this.autoVoteContinue(refreshedRoom);
+    }, GAME_CONSTANTS.MAINTENANCE_TIMEOUT);
   }
 
   private resolveVote(room: Room): void {
@@ -368,19 +504,15 @@ export class WaveManager {
 
     const retreatCount = Array.from(this.votes.values()).filter((v) => v === 'retreat').length;
     const total = this.votes.size;
-    const majority = retreatCount > total / 2; // 과반수 철수 시 철수, 동률은 계속
+    const majority = retreatCount > total / 2;
 
     if (majority) {
       this.endRun(refreshedRoom, 'retreat').catch((err) => logger.error('endRun failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
     } else {
-      // 적이 살아있으면 같은 웨이브 다시 (기존 적 전달), 죽었으면 다음 웨이브
-      if (this.currentEnemy && this.currentEnemy.hp > 0) {
-        this.startWave(refreshedRoom, this.currentEnemy).catch((err) => logger.error('startWave failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
-      } else {
-        const runState = roomManager.advanceWave(this.roomCode);
-        if (runState) {
-          this.startWave(roomManager.getRoom(this.roomCode)!).catch((err) => logger.error('startWave failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
-        }
+      // 적은 항상 사망 상태 → 다음 웨이브
+      const runState = roomManager.advanceWave(this.roomCode);
+      if (runState) {
+        this.startWave(roomManager.getRoom(this.roomCode)!).catch((err) => logger.error('startWave failed', { room: this.roomCode, error: err instanceof Error ? err.message : String(err) }));
       }
     }
   }
@@ -450,12 +582,40 @@ export class WaveManager {
     this.resolveVote(refreshedRoom);
   }
 
-  private clearTimer(type: 'intro' | 'choice' | 'roll' | 'vote'): void {
+  private expireBuffs(): void {
+    const refreshedRoom = roomManager.getRoom(this.roomCode);
+    if (!refreshedRoom) return;
+
+    for (const player of refreshedRoom.players) {
+      if (!player.activeBuffs || player.activeBuffs.length === 0) continue;
+
+      const updated = player.activeBuffs
+        .map((b) => ({ ...b, remainingWaves: b.remainingWaves - 1 }))
+        .filter((b) => b.remainingWaves > 0);
+
+      if (updated.length !== player.activeBuffs.length) {
+        player.activeBuffs = updated;
+        roomManager.updateCharacter(this.roomCode, player);
+
+        // 버프 변경 알림
+        this.io.to(player.socketId).emit(SOCKET_EVENTS.INVENTORY_UPDATED, {
+          inventory: toDisplayInventory(player.inventory),
+          equipment: player.equipment,
+          hp: player.hp,
+          maxHp: player.maxHp,
+          activeBuffs: player.activeBuffs,
+        });
+      }
+    }
+  }
+
+  private clearTimer(type: 'intro' | 'choice' | 'roll' | 'vote' | 'maintenance'): void {
     const timerMap = {
       intro: 'introTimer',
       choice: 'choiceTimer',
       roll: 'rollTimer',
       vote: 'voteTimer',
+      maintenance: 'maintenanceTimer',
     } as const;
 
     const key = timerMap[type];

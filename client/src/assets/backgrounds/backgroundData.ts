@@ -32,7 +32,7 @@ export interface WaveBgConfig {
 const STAGE_BASE: WaveBgConfig = {
   label: '야시장 골목',
   layers: [
-    // 은은한 보라색 소용돌이 (공간감)
+    // 은은한 보라색 소용돌이 (공간감) — 톤 다운
     {
       background: `repeating-conic-gradient(
         from 0deg at 50% 50%,
@@ -41,15 +41,15 @@ const STAGE_BASE: WaveBgConfig = {
         #a29bfe 10deg 15deg,
         #0d0221 15deg 20deg
       )`,
-      animation: 'swirlSpin 20s linear infinite',
-      opacity: 0.2,
+      animation: 'swirlSpin 30s linear infinite',
+      opacity: 0.07,
       inset: '-50%',
     },
-    // 시안 글로우 (야시장 네온)
+    // 시안 글로우 (야시장 네온) — 톤 다운
     {
-      background: 'radial-gradient(ellipse at 50% 50%, rgba(0,206,201,0.15), transparent 70%)',
-      animation: 'glowPulse 4s ease-in-out infinite',
-      opacity: 0.7,
+      background: 'radial-gradient(ellipse at 50% 50%, rgba(0,206,201,0.06), transparent 70%)',
+      animation: 'glowPulse 8s ease-in-out infinite',
+      opacity: 0.25,
       inset: '0',
     },
   ],

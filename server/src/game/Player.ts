@@ -13,7 +13,9 @@ const BACKGROUND_PRESETS: Record<string, {
     weakness: '어둠을 무서워함',
     equipment: {
       weapon: '알루미늄 배트',
-      armor: '두꺼운 패딩',
+      top: '두꺼운 패딩',
+      bottom: '작업 바지',
+      hat: '경비 모자',
       accessory: '행운의 열쇠고리',
       weaponBonus: 2,
       armorBonus: 1,
@@ -25,7 +27,9 @@ const BACKGROUND_PRESETS: Record<string, {
     weakness: '거미 공포증',
     equipment: {
       weapon: '식칼',
-      armor: '앞치마',
+      top: '앞치마',
+      bottom: '체크 팬츠',
+      hat: '요리사 모자',
       accessory: '손목시계',
       weaponBonus: 2,
       armorBonus: 1,
@@ -37,7 +41,9 @@ const BACKGROUND_PRESETS: Record<string, {
     weakness: '사회적 상황에 약함',
     equipment: {
       weapon: '노트북',
-      armor: '후디',
+      top: '후디',
+      bottom: '트레이닝 바지',
+      hat: '',
       accessory: '보조배터리',
       weaponBonus: 1,
       armorBonus: 1,
@@ -49,7 +55,9 @@ const BACKGROUND_PRESETS: Record<string, {
     weakness: '체력이 약함',
     equipment: {
       weapon: '명함',
-      armor: '정장',
+      top: '정장 상의',
+      bottom: '정장 바지',
+      hat: '',
       accessory: '고급 볼펜',
       weaponBonus: 1,
       armorBonus: 1,
@@ -74,12 +82,16 @@ export function createCharacter(socketId: string, name: string): Character {
     isAlive: true,
     equipment: {
       weapon: '',
-      armor: '',
+      top: '',
+      bottom: '',
+      hat: '',
       accessory: '',
       weaponBonus: 0,
       armorBonus: 0,
       accessoryEffect: { type: 'none' },
     },
+    inventory: [],
+    activeBuffs: [],
   };
 }
 

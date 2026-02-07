@@ -11,6 +11,10 @@ import type {
   LootItem,
   WaveEndPayload,
   RunEndPayload,
+  InventoryItemDisplay,
+  Equipment,
+  InventoryUpdatedPayload,
+  TemporaryBuff,
 } from '@round-midnight/shared';
 
 interface GameStore {
@@ -36,6 +40,7 @@ interface GameStore {
 
   // 전투 상태
   currentWave: number;
+  combatRound: number;
   enemy: Enemy | null;
   situation: string;
   myChoices: PlayerChoiceSet | null;
@@ -46,18 +51,25 @@ interface GameStore {
   loot: LootItem[];
 
   // 웨이브 종료 상태
-  canContinue: boolean;
   partyStatus: WaveEndPayload['partyStatus'];
   hasVoted: boolean;
   nextWavePreview: string;
   voteStatus: { continueCount: number; retreatCount: number; total: number } | null;
   setVoteStatus: (status: { continueCount: number; retreatCount: number; total: number }) => void;
 
+  // 인벤토리
+  inventory: InventoryItemDisplay[];
+  equipment: Equipment | null;
+  activeBuffs: TemporaryBuff[];
+  setInventoryUpdate: (payload: InventoryUpdatedPayload) => void;
+
   // 런 종료 상태
   runEndResult: RunEndPayload | null;
 
   // 전투 setter
   setWaveIntro: (wave: number, enemy: Enemy, situation: string, choices: PlayerChoiceSet) => void;
+  setCombatChoices: (round: number, choices: PlayerChoiceSet) => void;
+  setMaintenanceStart: (payload: { partyStatus: WaveEndPayload['partyStatus']; loot: LootItem[]; nextWavePreview?: string }) => void;
   setMyChoice: (choiceId: string) => void;
   setAllActions: (actions: PlayerAction[]) => void;
   setNarrative: (narrative: string, damageResult: DamageResult, partyStatus?: WaveEndPayload['partyStatus'], enemyHp?: number) => void;
@@ -92,6 +104,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
   // 전투 상태
   currentWave: 0,
+  combatRound: 0,
   enemy: null,
   situation: '',
   myChoices: null,
@@ -102,12 +115,32 @@ export const useGameStore = create<GameStore>((set) => ({
   loot: [],
 
   // 웨이브 종료 상태
-  canContinue: false,
   partyStatus: [],
   hasVoted: false,
   nextWavePreview: '',
   voteStatus: null,
   setVoteStatus: (status) => set({ voteStatus: status }),
+
+  // 인벤토리
+  inventory: [],
+  equipment: null,
+  activeBuffs: [],
+  setInventoryUpdate: (payload) =>
+    set((state) => ({
+      inventory: payload.inventory,
+      equipment: payload.equipment,
+      activeBuffs: payload.activeBuffs ?? state.activeBuffs,
+      player: state.player
+        ? {
+            ...state.player,
+            inventory: payload.inventory,
+            equipment: payload.equipment,
+            hp: payload.hp,
+            maxHp: payload.maxHp,
+            activeBuffs: payload.activeBuffs ?? state.player.activeBuffs ?? [],
+          }
+        : null,
+    })),
 
   // 런 종료 상태
   runEndResult: null,
@@ -115,6 +148,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setWaveIntro: (currentWave, enemy, situation, myChoices) =>
     set({
       currentWave,
+      combatRound: 1,
       enemy,
       situation,
       myChoices,
@@ -123,6 +157,25 @@ export const useGameStore = create<GameStore>((set) => ({
       narrative: '',
       damageResult: null,
       loot: [],
+      hasVoted: false,
+      voteStatus: null,
+    }),
+
+  setCombatChoices: (round, myChoices) =>
+    set({
+      combatRound: round,
+      myChoices,
+      mySelectedChoiceId: null,
+      allActions: null,
+      narrative: '',
+      damageResult: null,
+    }),
+
+  setMaintenanceStart: (payload) =>
+    set({
+      partyStatus: payload.partyStatus,
+      loot: payload.loot,
+      nextWavePreview: payload.nextWavePreview ?? '',
       hasVoted: false,
       voteStatus: null,
     }),
@@ -145,11 +198,9 @@ export const useGameStore = create<GameStore>((set) => ({
 
   setWaveEnd: (payload) =>
     set({
-      canContinue: payload.canContinue,
       partyStatus: payload.partyStatus,
       loot: payload.loot,
       nextWavePreview: payload.nextWavePreview ?? '',
-      hasVoted: false,
     }),
 
   setRunEnd: (payload) => set({ runEndResult: payload }),
@@ -166,6 +217,7 @@ export const useGameStore = create<GameStore>((set) => ({
       phase: 'waiting',
       run: null,
       currentWave: 0,
+      combatRound: 0,
       enemy: null,
       situation: '',
       myChoices: null,
@@ -174,11 +226,13 @@ export const useGameStore = create<GameStore>((set) => ({
       narrative: '',
       damageResult: null,
       loot: [],
-      canContinue: false,
       partyStatus: [],
       hasVoted: false,
       nextWavePreview: '',
       voteStatus: null,
+      inventory: [],
+      equipment: null,
+      activeBuffs: [],
       runEndResult: null,
       error: null,
     }),

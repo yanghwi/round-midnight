@@ -18,10 +18,9 @@ interface Props {
  *   inner: box-shadow 렌더링 (4px base element)
  */
 export default function EnemySprite({ imageTag, state = 'idle', isBoss = false }: Props) {
-  const sprite = SPRITES[imageTag];
-  if (!sprite) return null;
+  const sprite = SPRITES[imageTag] ?? SPRITES['raccoon'];
 
-  const { boxShadow, idleAnimation, idleDuration, idleSteps, scale: baseScale } = sprite;
+  const { boxShadow, idleAnimation, idleDuration, idleSteps, scale: baseScale, visualWidth, visualHeight } = sprite;
   const scale = isBoss ? Math.max(baseScale, 7) : baseScale;
 
   // 애니메이션 결정
@@ -36,20 +35,28 @@ export default function EnemySprite({ imageTag, state = 'idle', isBoss = false }
   }
 
   return (
-    <div
-      className="flex items-center justify-center py-4"
-      style={{ transform: `scale(${scale})` }}
-    >
-      <div style={{ animation }}>
-        <div
-          style={{
-            width: 4,
-            height: 4,
-            background: 'transparent',
-            boxShadow,
-            imageRendering: 'pixelated',
-          }}
-        />
+    <div className="flex items-center justify-center py-6">
+      <div style={{
+        width: visualWidth * scale,
+        height: visualHeight * scale,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+          <div style={{ animation }}>
+            <div
+              style={{
+                width: 4,
+                height: 4,
+                background: 'transparent',
+                boxShadow,
+                imageRendering: 'pixelated',
+                transform: `translate(-${visualWidth / 2}px, -${visualHeight / 2}px)`,
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

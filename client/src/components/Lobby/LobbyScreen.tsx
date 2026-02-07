@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import type { Room, Character } from '@round-midnight/shared';
+import type { Room, Character, InventoryItemDisplay, ItemRarity } from '@round-midnight/shared';
 import { GAME_CONSTANTS } from '@round-midnight/shared';
+import { useGameStore } from '../../stores/gameStore';
+import LobbyBg from './LobbyBg';
 
 type LobbyProps =
   | {
@@ -60,62 +62,68 @@ function HomeView({
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8 relative min-h-dvh">
+      <LobbyBg />
+
       {/* 타이틀 */}
-      <div className="text-center">
-        <h1 className="font-title text-xl sm:text-2xl text-white tracking-tight">
+      <div className="text-center relative z-10">
+        <h1 className="font-title text-xl sm:text-2xl text-white tracking-wider lobby-title">
           Round Midnight
         </h1>
-        <p className="mt-2 text-slate-400 text-sm">
+        <p className="mt-3 font-body text-sm text-gold tracking-widest lobby-subtitle">
           자정이 지나면, 이상한 일이 시작된다
         </p>
       </div>
 
       {/* 이름 입력 */}
-      <div className="w-full max-w-xs">
-        <input
-          type="text"
-          placeholder="이름을 입력하세요"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={10}
-          className="w-full px-4 py-3 bg-midnight-700 border-2 border-indigo rounded text-white placeholder-slate-500 text-center text-lg focus:outline-none focus:border-arcane-light transition-colors"
-        />
+      <div className="w-full max-w-xs relative z-10">
+        <div className="eb-window !p-0">
+          <input
+            type="text"
+            placeholder="이름을 입력하세요"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={10}
+            className="w-full px-4 py-3 bg-transparent text-white placeholder-slate-500 text-center font-body text-lg focus:outline-none"
+          />
+        </div>
       </div>
 
       {/* 버튼들 */}
-      <div className="w-full max-w-xs flex flex-col gap-3">
+      <div className="w-full max-w-xs flex flex-col gap-3 relative z-10">
         <button
           onClick={handleCreate}
           disabled={!name.trim()}
-          className="w-full py-3.5 bg-arcane text-white font-bold rounded border-2 border-arcane-light active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
+          className="w-full eb-window !border-arcane-light text-center active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
         >
-          방 만들기
+          <span className="font-title text-sm text-arcane-light">방 만들기</span>
         </button>
 
         {!showJoin ? (
           <button
             onClick={() => setShowJoin(true)}
-            className="w-full py-3.5 bg-transparent text-arcane-light font-bold rounded border-2 border-arcane-light/50 active:scale-95 transition-transform"
+            className="w-full eb-window !border-slate-400 text-center active:scale-95 transition-transform"
           >
-            참가하기
+            <span className="font-title text-sm text-slate-300">참가하기</span>
           </button>
         ) : (
           <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="방 코드"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              maxLength={4}
-              className="flex-1 px-3 py-3 bg-midnight-700 border-2 border-indigo rounded text-white placeholder-slate-500 text-center text-lg tracking-widest focus:outline-none focus:border-arcane-light transition-colors"
-            />
+            <div className="flex-1 eb-window !p-0">
+              <input
+                type="text"
+                placeholder="방 코드"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                maxLength={4}
+                className="w-full px-3 py-3 bg-transparent text-white placeholder-slate-500 text-center font-body text-lg tracking-widest focus:outline-none"
+              />
+            </div>
             <button
               onClick={handleJoin}
               disabled={!name.trim() || joinCode.length < 4}
-              className="px-5 py-3 bg-arcane text-white font-bold rounded border-2 border-arcane-light active:scale-95 transition-transform disabled:opacity-40"
+              className="eb-window !border-arcane-light active:scale-95 transition-transform disabled:opacity-40"
             >
-              입장
+              <span className="font-title text-sm text-arcane-light">입장</span>
             </button>
           </div>
         )}
@@ -125,6 +133,22 @@ function HomeView({
 }
 
 // ===== 대기실 화면 =====
+
+const RARITY_COLORS: Record<ItemRarity, string> = {
+  common: 'text-slate-400',
+  uncommon: 'text-green-400',
+  rare: 'text-blue-400',
+  legendary: 'text-gold',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  weapon: '무기',
+  top: '상의',
+  bottom: '하의',
+  hat: '모자',
+  accessory: '악세서리',
+  consumable: '소모품',
+};
 
 function RoomView({
   room,
@@ -140,44 +164,51 @@ function RoomView({
   const isHost = player.id === room.hostId;
   const playerCount = room.players.length;
   const maxPlayers = GAME_CONSTANTS.MAX_PLAYERS;
+  const [showCharPanel, setShowCharPanel] = useState(false);
+  const inventory = useGameStore((s) => s.inventory);
+  const equipment = useGameStore((s) => s.equipment);
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-8 gap-6">
+    <div className="flex-1 flex flex-col px-6 py-8 gap-6 relative min-h-dvh">
+      <LobbyBg />
+
       {/* 방 코드 */}
-      <div className="text-center">
-        <p className="text-slate-400 text-sm mb-1">방 코드</p>
-        <p className="font-title text-2xl sm:text-3xl text-gold tracking-[0.2em] sm:tracking-[0.3em]">
-          {room.code}
-        </p>
-        <p className="text-slate-500 text-xs mt-1">친구에게 이 코드를 알려주세요</p>
+      <div className="text-center relative z-10">
+        <p className="font-body text-sm text-slate-400 mb-2">방 코드</p>
+        <div className="eb-window inline-block !px-6 !py-3">
+          <p className="font-title text-2xl sm:text-3xl text-gold tracking-[0.2em] sm:tracking-[0.3em] lobby-title" style={{ animationDuration: '4s' }}>
+            {room.code}
+          </p>
+        </div>
+        <p className="font-body text-xs text-slate-500 mt-2">친구에게 이 코드를 알려주세요</p>
       </div>
 
       {/* 참가자 목록 */}
-      <div className="flex-1">
-        <p className="text-slate-400 text-sm mb-3">
+      <div className="flex-1 relative z-10">
+        <p className="font-body text-sm text-slate-400 mb-3">
           참가자 ({playerCount}/{maxPlayers})
         </p>
         <div className="flex flex-col gap-2">
           {room.players.map((p) => (
             <div
               key={p.id}
-              className={`flex items-center gap-3 px-4 py-3 rounded border-2 ${
+              className={`eb-window flex items-center gap-3 ${
                 p.id === player.id
-                  ? 'bg-arcane/20 border-arcane'
-                  : 'bg-midnight-700 border-midnight-700'
+                  ? '!border-arcane-light'
+                  : '!border-slate-600'
               }`}
             >
-              <span className="text-lg">
-                {p.id === room.hostId ? '👑' : '🎮'}
+              <span className="font-body text-lg">
+                {p.id === room.hostId ? '★' : '●'}
               </span>
-              <span className="text-white font-medium flex-1">
+              <span className="font-body text-white flex-1">
                 {p.name}
                 {p.id === player.id && (
                   <span className="text-arcane-light text-xs ml-2">(나)</span>
                 )}
               </span>
               {p.id === room.hostId && (
-                <span className="text-gold text-xs">호스트</span>
+                <span className="font-body text-gold text-xs">호스트</span>
               )}
             </div>
           ))}
@@ -186,32 +217,107 @@ function RoomView({
           {Array.from({ length: maxPlayers - playerCount }).map((_, i) => (
             <div
               key={`empty-${i}`}
-              className="flex items-center gap-3 px-4 py-3 rounded border-2 border-dashed border-midnight-600 text-slate-600"
+              className="eb-window flex items-center gap-3 !border-dashed !border-slate-700 opacity-40"
             >
-              <span className="text-lg">⬜</span>
-              <span>대기 중...</span>
+              <span className="font-body text-lg text-slate-600">○</span>
+              <span className="font-body text-slate-600">대기 중...</span>
             </div>
           ))}
         </div>
       </div>
 
+      {/* 캐릭터 패널 토글 */}
+      {showCharPanel && (
+        <div className="relative z-10">
+          <CharacterPanel inventory={inventory} equipment={equipment} onClose={() => setShowCharPanel(false)} />
+        </div>
+      )}
+
       {/* 하단 버튼 */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 relative z-10">
+        <button
+          onClick={() => setShowCharPanel(!showCharPanel)}
+          className="w-full eb-window !border-arcane text-center active:scale-95 transition-transform"
+        >
+          <span className="font-title text-sm text-arcane-light">
+            {showCharPanel ? '패널 닫기' : '캐릭터 정보'}
+          </span>
+        </button>
         {isHost && (
           <button
             onClick={onStartGame}
-            className="w-full py-4 bg-green-600 text-white font-bold text-lg rounded border-2 border-green-400 active:scale-95 transition-transform"
+            className="w-full eb-window !border-gold text-center active:scale-95 transition-transform"
           >
-            게임 시작
+            <span className="font-title text-base text-gold">게임 시작</span>
           </button>
         )}
         <button
           onClick={onLeaveRoom}
-          className="w-full py-3 bg-transparent text-red-400 font-medium rounded border-2 border-red-400/30 active:scale-95 transition-transform"
+          className="w-full eb-window !border-tier-fail text-center active:scale-95 transition-transform"
         >
-          나가기
+          <span className="font-title text-sm text-tier-fail">나가기</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+function CharacterPanel({
+  inventory,
+  equipment,
+  onClose,
+}: {
+  inventory: InventoryItemDisplay[];
+  equipment: import('@round-midnight/shared').Equipment | null;
+  onClose: () => void;
+}) {
+  if (inventory.length === 0 && !equipment) {
+    return (
+      <div className="eb-window animate-fade-in">
+        <div className="font-title text-sm text-arcane-light mb-2">캐릭터 정보</div>
+        <div className="font-body text-sm text-slate-500 text-center py-4">
+          아직 모험을 떠나지 않았습니다
+        </div>
+      </div>
+    );
+  }
+
+  const equippedItems = inventory.filter((i) => i.equipped);
+  const unequippedItems = inventory.filter((i) => !i.equipped);
+
+  return (
+    <div className="eb-window animate-fade-in max-h-64 overflow-y-auto">
+      <div className="font-title text-sm text-arcane-light mb-2">캐릭터 정보</div>
+
+      {/* 장착 장비 */}
+      {equippedItems.length > 0 && (
+        <div className="mb-3">
+          <div className="font-title text-xs text-slate-500 mb-1">장착 중</div>
+          <div className="space-y-1">
+            {equippedItems.map((item, i) => (
+              <div key={`eq-${i}`} className="flex items-center gap-2 font-body text-xs">
+                <span className="text-slate-500">[{TYPE_LABELS[item.type]}]</span>
+                <span className={RARITY_COLORS[item.rarity]}>{item.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 미장착 아이템 */}
+      {unequippedItems.length > 0 && (
+        <div>
+          <div className="font-title text-xs text-slate-500 mb-1">보관 중 ({unequippedItems.length})</div>
+          <div className="space-y-1">
+            {unequippedItems.map((item, i) => (
+              <div key={`inv-${i}`} className="flex items-center gap-2 font-body text-xs">
+                <span className="text-slate-600">[{TYPE_LABELS[item.type]}]</span>
+                <span className={`${RARITY_COLORS[item.rarity]} opacity-70`}>{item.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

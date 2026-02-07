@@ -47,9 +47,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Noto Sans KR', 'sans-serif'],
-        title: ['"Press Start 2P"', 'cursive'],
-        body: ['Silkscreen', 'sans-serif'],
+        sans: ['"Noto Sans KR"', 'sans-serif'],
+        title: ['"Press Start 2P"', '"Noto Sans KR"', 'sans-serif'],
+        body: ['Silkscreen', '"Noto Sans KR"', 'sans-serif'],
       },
       animation: {
         'dice-spin': 'diceSpin 0.6s ease-out',

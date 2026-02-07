@@ -11,16 +11,32 @@ export interface Character {
   maxHp: number;
   isAlive: boolean;
   equipment: Equipment;
+  inventory: InventoryItem[];  // 런 중 획득한 아이템
+  activeBuffs: TemporaryBuff[];  // 소모품 임시 버프
+}
+
+export interface TemporaryBuff {
+  effect: ItemEffect;
+  remainingWaves: number;   // 남은 웨이브 수 (0이면 만료)
+  sourceItemId: string;
 }
 
 export interface Equipment {
   weapon: string;              // "알루미늄 배트", "식칼", "노트북", "명함"
-  armor: string;               // "두꺼운 패딩", "앞치마", "후디", "정장"
+  top: string;                 // 상의 (기존 armor → top)
+  bottom: string;              // 하의
+  hat: string;                 // 모자
   accessory: string;           // "행운의 열쇠고리", "손목시계", "보조배터리"
   // 장비 효과
   weaponBonus: number;         // 물리 행동 시 주사위 보정 (예: +2)
-  armorBonus: number;          // 방어 행동 시 주사위 보정
+  armorBonus: number;          // top+bottom+hat 합산 방어 보정
   accessoryEffect: AccessoryEffect;
+  // 장착된 아이템 ID (카탈로그 연결)
+  weaponItemId?: string;
+  topItemId?: string;
+  bottomItemId?: string;
+  hatItemId?: string;
+  accessoryItemId?: string;
 }
 
 export type AccessoryEffect =
@@ -28,6 +44,49 @@ export type AccessoryEffect =
   | { type: 'min_raise'; minValue: number }     // 최소 주사위 값 보장
   | { type: 'crit_expand'; critMin: number }    // 크리티컬 범위 확장 (기본 15)
   | { type: 'none' };
+
+// ===== 아이템 시스템 =====
+
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
+
+export interface ItemDefinition {
+  id: string;                    // "rusty_pipe"
+  name: string;                  // "녹슨 파이프"
+  type: 'weapon' | 'top' | 'bottom' | 'hat' | 'accessory' | 'consumable';
+  rarity: ItemRarity;
+  description: string;           // 게임 내 설명
+  flavorText: string;            // EarthBound 스타일 한줄
+  effects: ItemEffect[];         // 구조화된 효과
+  tags: string[];                // LLM 컨텍스트용
+  dropWeight: number;            // 가중 랜덤용
+  bossOnly?: boolean;
+  waveMinimum?: number;
+}
+
+export type ItemEffect =
+  | { type: 'stat_bonus'; stat: 'weaponBonus' | 'armorBonus'; value: number }
+  | { type: 'hp_restore'; value: number }
+  | { type: 'dc_reduction'; category: ActionCategory | 'all'; value: number }
+  | { type: 'min_raise'; minValue: number }
+  | { type: 'reroll'; count: number }
+  | { type: 'crit_expand'; critMin: number }
+  | { type: 'damage_multiplier'; multiplier: number; condition?: 'boss' }
+  | { type: 'wave_heal'; value: number };
+
+export interface InventoryItem {
+  itemId: string;                 // ItemDefinition.id 참조
+  equipped: boolean;
+}
+
+export interface InventoryItemDisplay {
+  itemId: string;
+  equipped: boolean;
+  name: string;
+  type: 'weapon' | 'top' | 'bottom' | 'hat' | 'accessory' | 'consumable';
+  rarity: ItemRarity;
+  effect: string;       // summarizeEffects 결과
+  flavorText: string;
+}
 
 // ===== 웨이브 전투 =====
 
@@ -93,10 +152,14 @@ export interface DamageResult {
 }
 
 export interface LootItem {
+  itemId: string;              // ItemDefinition.id 참조
   name: string;
-  type: 'weapon' | 'armor' | 'accessory' | 'consumable';
+  type: 'weapon' | 'top' | 'bottom' | 'hat' | 'accessory' | 'consumable';
+  rarity: ItemRarity;
   description: string;
   effect: string;              // 사람이 읽을 수 있는 효과 설명
+  assignedTo?: string;         // 분배된 플레이어 이름
+  inventoryFull?: boolean;     // 인벤토리 가득 차서 획득 불가
 }
 
 // ===== 런 상태 =====
@@ -119,7 +182,8 @@ export type RunPhase =
   | 'choosing'          // 4명이 선택지 고르는 중
   | 'rolling'           // 4명이 주사위 굴리는 중
   | 'narrating'         // LLM이 결과 서술 중
-  | 'wave_result'       // 결과 표시 + 계속/철수 선택
+  | 'wave_result'       // 전리품 표시 (3초)
+  | 'maintenance'       // 장비 관리 + 계속/철수 투표
   | 'run_end';          // 런 종료 (철수/전멸/클리어)
 
 // ===== 방 =====
@@ -159,11 +223,20 @@ export interface WaveNarrativePayload {
 }
 
 export interface WaveEndPayload {
-  canContinue: boolean;               // 적 처치 && 생존자 있음
   partyStatus: { playerId: string; name: string; hp: number; maxHp: number }[];
   loot: LootItem[];
   nextWavePreview?: string;           // "다음: 더 깊은 곳에서 이상한 소리가..."
-  voteStatus?: { continueCount: number; retreatCount: number; total: number };
+}
+
+export interface CombatChoicesPayload {
+  combatRound: number;
+  playerChoices: PlayerChoiceSet[];   // 이 클라이언트에 해당하는 선택지만
+}
+
+export interface MaintenanceStartPayload {
+  partyStatus: { playerId: string; name: string; hp: number; maxHp: number }[];
+  loot: LootItem[];
+  nextWavePreview?: string;
 }
 
 export interface RunEndPayload {
@@ -212,6 +285,30 @@ export interface CharacterSetupPayload {
   background: string;
 }
 
+export interface EquipItemPayload {
+  itemId: string;
+}
+
+export interface UnequipItemPayload {
+  itemId: string;
+}
+
+export interface UseConsumablePayload {
+  itemId: string;
+}
+
+export interface InventoryUpdatedPayload {
+  inventory: InventoryItemDisplay[];
+  equipment: Equipment;
+  hp: number;
+  maxHp: number;
+  activeBuffs?: TemporaryBuff[];
+}
+
+export interface DiscardItemPayload {
+  itemId: string;
+}
+
 // ===== 상수 =====
 
 export const GAME_CONSTANTS = {
@@ -221,8 +318,8 @@ export const GAME_CONSTANTS = {
   MIN_PLAYERS: 1,
 
   // 기본 스탯
-  DEFAULT_HP: 100,
-  DEFAULT_MAX_HP: 100,
+  DEFAULT_HP: 60,
+  DEFAULT_MAX_HP: 60,
 
   // 웨이브
   MAX_WAVES: 10,
@@ -233,6 +330,10 @@ export const GAME_CONSTANTS = {
   CHOICE_TIMEOUT: 10000,      // 선택지 10초
   DICE_ROLL_TIMEOUT: 5000,    // 주사위 5초
   VOTE_TIMEOUT: 30000,        // 계속/철수 30초
+  MAINTENANCE_TIMEOUT: 45000,  // 정비 세션 45초
+
+  // 인벤토리
+  MAX_RUN_INVENTORY: 20,
 
   // 데미지 계산
   BASE_DAMAGE: 15,
@@ -283,8 +384,19 @@ export const SOCKET_EVENTS = {
   // 런 종료
   RUN_END: 'run-end',
 
+  // 멀티라운드 전투 + 정비
+  COMBAT_CHOICES: 'combat-choices',
+  MAINTENANCE_START: 'maintenance-start',
+
   // 투표 현황
   VOTE_UPDATE: 'vote-update',
+
+  // 아이템/인벤토리
+  EQUIP_ITEM: 'equip-item',
+  UNEQUIP_ITEM: 'unequip-item',
+  USE_CONSUMABLE: 'use-consumable',
+  DISCARD_ITEM: 'discard-item',
+  INVENTORY_UPDATED: 'inventory-updated',
 
   // 재접속
   RECONNECT_ATTEMPT: 'reconnect-attempt',

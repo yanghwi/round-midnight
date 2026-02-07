@@ -10,12 +10,13 @@
 ## 코어 루프
 
 ```
-웨이브 시작
+웨이브 시작 (적 1마리 조우)
   → LLM이 상황 묘사 + 4명 각자에게 서로 다른 선택지 생성
   → 4명 동시에 선택지 고름 (10초)
   → 4명 동시에 d20 주사위 굴림
   → LLM이 "4명의 선택 + 4개의 주사위" 조합으로 전투 서술
-  → 데미지 계산 → 계속/철수 투표
+  → 적 생존 시: 새 선택지만 생성 → 전투 반복
+  → 적 사망 시: 전리품 획득 → 정비 세션 (장비 관리 + 투표)
   → 다음 웨이브 또는 런 종료
 ```
 
@@ -80,7 +81,7 @@ round-midnight/
 ├── client/src/
 │   ├── components/
 │   │   ├── Lobby/             # LobbyScreen, CharacterSetup
-│   │   └── Battle/            # BattleScreen, SituationBox, DiceRoll, NarrationBox 등 10개
+│   │   └── Battle/            # BattleScreen, MaintenanceScreen, SituationBox, DiceRoll 등 11개
 │   ├── assets/
 │   │   ├── sprites/           # box-shadow 픽셀아트 (5종, scale 5~7)
 │   │   ├── backgrounds/       # 스테이지 기반 CSS gradient 배경 (기본+중보스+최종보스)
@@ -96,11 +97,15 @@ round-midnight/
 │   │   ├── narrativeGenerator.ts
 │   │   └── highlightsGenerator.ts
 │   ├── game/
+│   │   ├── data/items/        # 아이템 카탈로그 (106종, 6 파일)
 │   │   ├── Room.ts            # 방 관리 + phase 상태 머신
 │   │   ├── Player.ts          # Character 생성 + 배경 적용
 │   │   ├── WaveManager.ts     # 웨이브 진행 (per-room)
 │   │   ├── DiceEngine.ts      # d20 주사위 + DC 판정
-│   │   └── DamageCalculator.ts
+│   │   ├── DamageCalculator.ts
+│   │   ├── InventoryManager.ts # 장착/해제/사용/버리기
+│   │   ├── ItemEffectResolver.ts # 장비+버프 효과 집계
+│   │   └── LootEngine.ts      # 가중 랜덤 드랍 생성
 │   └── socket/handlers.ts
 ├── shared/types.ts            # 공유 타입 + 상수 + 소켓 이벤트
 ├── Dockerfile                 # Railway 서버 배포
@@ -116,7 +121,8 @@ round-midnight/
 - [x] **Phase 4**: 비주얼 에셋 + 배포 + 모바일 최적화
 - [x] **Phase 5**: 전투 화면 가독성 + UX 개선
 - [x] **Phase A**: 기반 정비 (장비 효과, 재접속, 투표 UI, 스프라이트/배경 개편)
-- [ ] **Phase B**: 아이템 시스템 (100종 카탈로그 + 인벤토리)
+- [x] **Phase B**: 아이템 시스템 (106종 카탈로그 + 인벤토리 + 임시 버프)
+- [x] **Phase B-feedback**: 전투 흐름 개편 (멀티라운드 전투, 정비 세션, HP 밸런스, 스프라이트 센터링)
 - [ ] **Phase C**: 보스 몬스터 시스템 (Wave 5 중보스, Wave 10 최종보스)
 - [ ] **Phase D**: DB + 영속성 (Prisma + PostgreSQL)
 - [ ] **Phase E**: Discord OAuth2 인증

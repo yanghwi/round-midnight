@@ -6,12 +6,13 @@ import CharacterSetup from './components/Lobby/CharacterSetup';
 import BattleScreen from './components/Battle/BattleScreen';
 import RunResult from './components/Battle/RunResult';
 
-const BATTLE_PHASES = new Set(['wave_intro', 'choosing', 'rolling', 'narrating', 'wave_result']);
+const BATTLE_PHASES = new Set(['wave_intro', 'choosing', 'rolling', 'narrating', 'wave_result', 'maintenance']);
 
 function App() {
   const {
     createRoom, joinRoom, startGame, leaveRoom,
     submitCharacterSetup, submitChoice, rollDice, voteContinueOrRetreat,
+    equipItem, unequipItem, useConsumable, discardItem,
   } = useSocket();
   const { phase, room, player, connected, error, setError, resetGame } = useGameStore();
 
@@ -73,6 +74,10 @@ function App() {
           onSubmitChoice={submitChoice}
           onRoll={rollDice}
           onVote={voteContinueOrRetreat}
+          onEquipItem={equipItem}
+          onUnequipItem={unequipItem}
+          onUseConsumable={useConsumable}
+          onDiscardItem={discardItem}
         />
       )}
 

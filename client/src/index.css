@@ -43,8 +43,8 @@
   --pixel: 4px;
 
   /* Typography */
-  --font-title: 'Press Start 2P', monospace;
-  --font-body: 'Silkscreen', monospace;
+  --font-title: 'Press Start 2P', 'Noto Sans KR', sans-serif;
+  --font-body: 'Silkscreen', 'Noto Sans KR', sans-serif;
 }
 
 /* 기본 스타일 */
@@ -104,6 +104,95 @@ body {
     rgba(0, 0, 0, 0.08) 3px,
     rgba(0, 0, 0, 0.08) 4px
   );
+}
+
+/* ===== 로비 배경/타이틀 애니메이션 ===== */
+.psychedelic-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 120%,
+      #0d0221 0deg 10deg,
+      #1a0533 10deg 20deg,
+      #2d1b69 20deg 30deg,
+      #1a0533 30deg 40deg
+    );
+  animation: rotateBg 20s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes rotateBg {
+  to { transform: rotate(360deg); }
+}
+
+.checker-overlay {
+  position: absolute;
+  inset: -100%;
+  background:
+    repeating-conic-gradient(#e84393 0% 25%, transparent 0% 50%) 0 0 / 24px 24px;
+  opacity: 0.04;
+  animation: scrollCheck 8s linear infinite;
+}
+
+@keyframes scrollCheck {
+  to { transform: translate(24px, 24px); }
+}
+
+.lobby-title {
+  text-shadow:
+    4px 4px 0 #e84393,
+    -2px -2px 0 #6c5ce7,
+    0 0 20px rgba(232, 67, 147, 0.5),
+    0 0 40px rgba(108, 92, 231, 0.3);
+  animation: titleGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes titleGlow {
+  0% {
+    text-shadow:
+      4px 4px 0 #e84393,
+      -2px -2px 0 #6c5ce7,
+      0 0 20px rgba(232, 67, 147, 0.5),
+      0 0 40px rgba(108, 92, 231, 0.3);
+  }
+  100% {
+    text-shadow:
+      4px 4px 0 #e84393,
+      -2px -2px 0 #6c5ce7,
+      0 0 30px rgba(232, 67, 147, 0.8),
+      0 0 60px rgba(108, 92, 231, 0.5),
+      0 0 80px rgba(253, 203, 110, 0.2);
+  }
+}
+
+.lobby-subtitle {
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  animation: subtitlePulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes subtitlePulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.lobby-star {
+  position: absolute;
+  background: #fff;
+  width: 2px;
+  height: 2px;
+  image-rendering: pixelated;
+  animation: twinkle 1.5s ease-in-out infinite alternate;
+}
+
+.lobby-star:nth-child(odd) { animation-delay: 0.3s; }
+.lobby-star:nth-child(3n) { animation-delay: 0.7s; }
+.lobby-star:nth-child(5n) { background: #fdcb6e; width: 3px; height: 3px; }
+.lobby-star:nth-child(7n) { background: #e84393; }
+
+@keyframes twinkle {
+  0% { opacity: 0.3; }
+  100% { opacity: 1; }
 }
 
 /* ===== 가로 모드 차단 ===== */

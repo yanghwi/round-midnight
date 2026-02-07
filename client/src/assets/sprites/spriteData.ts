@@ -14,6 +14,10 @@ export interface SpriteConfig {
   idleSteps: number | null;
   /** 스프라이트 scale factor */
   scale: number;
+  /** box-shadow 시각 영역 너비 (px) — 센터링 보정용 */
+  visualWidth: number;
+  /** box-shadow 시각 영역 높이 (px) — 센터링 보정용 */
+  visualHeight: number;
 }
 
 const SPRITES: Record<string, SpriteConfig> = {
@@ -45,6 +49,8 @@ const SPRITES: Record<string, SpriteConfig> = {
     idleDuration: '1s',
     idleSteps: 2,
     scale: 5,
+    visualWidth: 52,
+    visualHeight: 32,
   },
 
   /**
@@ -77,6 +83,8 @@ const SPRITES: Record<string, SpriteConfig> = {
     idleDuration: '1.2s',
     idleSteps: 2,
     scale: 5,
+    visualWidth: 32,
+    visualHeight: 44,
   },
 
   /**
@@ -110,6 +118,8 @@ const SPRITES: Record<string, SpriteConfig> = {
     idleDuration: '2s',
     idleSteps: null,
     scale: 5,
+    visualWidth: 48,
+    visualHeight: 28,
   },
 
   /**
@@ -140,6 +150,8 @@ const SPRITES: Record<string, SpriteConfig> = {
     idleDuration: '0.8s',
     idleSteps: 2,
     scale: 6,
+    visualWidth: 44,
+    visualHeight: 36,
   },
 
   /**
@@ -173,6 +185,8 @@ const SPRITES: Record<string, SpriteConfig> = {
     idleDuration: '3s',
     idleSteps: null,
     scale: 7,
+    visualWidth: 44,
+    visualHeight: 40,
   },
 };
 

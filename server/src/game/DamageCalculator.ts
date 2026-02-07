@@ -3,11 +3,9 @@ import type {
   Enemy,
   DamageResult,
   Character,
-  LootItem,
   RollTier,
 } from '@round-midnight/shared';
 import { GAME_CONSTANTS } from '@round-midnight/shared';
-import { LOOT_TABLE } from './data/hardcodedData.js';
 
 /** 티어별 데미지 배율 및 플레이어 피해 비율 */
 const TIER_DAMAGE: Record<RollTier, { dmgMultiplier: number; playerHitRatio: number }> = {
@@ -20,8 +18,15 @@ const TIER_DAMAGE: Record<RollTier, { dmgMultiplier: number; playerHitRatio: num
 
 /**
  * 4명의 행동 결과로 적/아군 데미지 계산
+ * @param playerMultipliers 플레이어별 damage_multiplier (아이템 효과)
+ * @param isBossWave 보스 웨이브 여부 (bossDamageMultiplier 적용)
  */
-export function calculateDamage(actions: PlayerAction[], enemy: Enemy): DamageResult {
+export function calculateDamage(
+  actions: PlayerAction[],
+  enemy: Enemy,
+  playerMultipliers?: Map<string, { damageMultiplier: number; bossDamageMultiplier: number }>,
+  isBossWave?: boolean,
+): DamageResult {
   const BASE = GAME_CONSTANTS.BASE_DAMAGE;
 
   let totalEnemyDamage = 0;
@@ -29,7 +34,16 @@ export function calculateDamage(actions: PlayerAction[], enemy: Enemy): DamageRe
 
   for (const action of actions) {
     const { dmgMultiplier, playerHitRatio } = TIER_DAMAGE[action.tier];
-    totalEnemyDamage += BASE * dmgMultiplier;
+    let dmg = BASE * dmgMultiplier;
+
+    // 아이템 효과: damage_multiplier
+    const multipliers = playerMultipliers?.get(action.playerId);
+    if (multipliers) {
+      dmg *= multipliers.damageMultiplier;
+      if (isBossWave) dmg *= multipliers.bossDamageMultiplier;
+    }
+
+    totalEnemyDamage += Math.floor(dmg);
     playerDamages.push({
       playerId: action.playerId,
       damage: Math.floor(enemy.attack * playerHitRatio),
@@ -45,7 +59,7 @@ export function calculateDamage(actions: PlayerAction[], enemy: Enemy): DamageRe
     enemyDamage: totalEnemyDamage,
     playerDamages,
     enemyDefeated,
-    loot: enemyDefeated ? generateLoot(1) : [],
+    loot: [], // 루트 생성은 WaveManager에서 담당
   };
 }
 
@@ -60,12 +74,4 @@ export function applyDamageToPlayers(players: Character[], damageResult: DamageR
     const newHp = Math.max(0, p.hp - dmg.damage);
     return { ...p, hp: newHp, isAlive: newHp > 0 };
   });
-}
-
-/**
- * 전리품 랜덤 생성 (적 처치 시)
- */
-export function generateLoot(count: number): LootItem[] {
-  const shuffled = [...LOOT_TABLE].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
 }

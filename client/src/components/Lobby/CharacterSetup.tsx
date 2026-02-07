@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Room, Character } from '@round-midnight/shared';
 import { BACKGROUNDS } from '../../styles/theme';
+import LobbyBg from './LobbyBg';
 
 interface CharacterSetupProps {
   room: Room;
@@ -37,31 +38,37 @@ export default function CharacterSetup({ room, player, onSubmit }: CharacterSetu
   const readyPlayers = room.players.filter((p) => p.background !== '');
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-6 gap-5">
+    <div className="flex-1 flex flex-col px-6 py-6 gap-5 relative min-h-dvh">
+      <LobbyBg />
+
       {/* 헤더 */}
-      <div className="text-center">
-        <h2 className="font-title text-sm sm:text-base text-white">캐릭터 설정</h2>
-        <p className="text-slate-400 text-sm mt-1">
+      <div className="text-center relative z-10">
+        <h2 className="font-title text-sm sm:text-base text-white lobby-title">캐릭터 설정</h2>
+        <p className="font-body text-sm text-gold mt-2 lobby-subtitle">
           당신은 누구입니까?
         </p>
       </div>
 
       {/* 이름 수정 */}
       {!hasSubmitted && (
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={10}
-          placeholder="이름"
-          className="w-full px-4 py-3 bg-midnight-700 border-2 border-indigo rounded text-white text-center text-lg focus:outline-none focus:border-arcane-light transition-colors"
-        />
+        <div className="relative z-10">
+          <div className="eb-window !p-0">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={10}
+              placeholder="이름"
+              className="w-full px-4 py-3 bg-transparent text-white text-center font-body text-lg focus:outline-none"
+            />
+          </div>
+        </div>
       )}
 
       {/* 배경 선택 카드 */}
       {!hasSubmitted ? (
-        <div className="flex-1 flex flex-col gap-3">
-          <p className="text-slate-400 text-sm">배경을 선택하세요</p>
+        <div className="flex-1 flex flex-col gap-3 relative z-10">
+          <p className="font-body text-sm text-slate-400">배경을 선택하세요</p>
           {BACKGROUNDS.map((bg) => {
             const isTaken = takenBackgrounds.includes(bg.label);
             const isSelected = selectedBg === bg.label;
@@ -71,29 +78,29 @@ export default function CharacterSetup({ room, player, onSubmit }: CharacterSetu
                 key={bg.id}
                 onClick={() => !isTaken && setSelectedBg(bg.label)}
                 disabled={isTaken}
-                className={`w-full text-left px-4 py-4 rounded border-2 transition-all active:scale-[0.98] ${
+                className={`w-full text-left eb-window transition-all active:scale-[0.98] ${
                   isSelected
-                    ? 'bg-arcane/20 border-arcane shadow-lg shadow-arcane/20'
+                    ? '!border-arcane-light !shadow-[4px_4px_0_rgba(108,92,231,0.5)]'
                     : isTaken
-                      ? 'bg-midnight-800 border-midnight-700 opacity-40'
-                      : 'bg-midnight-700 border-midnight-600 hover:border-arcane-light/50'
+                      ? '!border-slate-700 opacity-40'
+                      : '!border-slate-600'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{bg.emoji}</span>
                   <div className="flex-1">
-                    <p className="text-white font-bold">
+                    <p className="font-body text-white font-bold">
                       {bg.label}
                       {isTaken && <span className="text-slate-500 text-xs ml-2">(선택됨)</span>}
                     </p>
-                    <p className="text-slate-400 text-xs mt-0.5">{bg.description}</p>
+                    <p className="font-body text-slate-400 text-xs mt-0.5">{bg.description}</p>
                     {isSelected && (
-                      <p className="text-arcane-light text-xs mt-1 italic">
+                      <p className="font-body text-arcane-light text-xs mt-1 italic">
                         {getBackgroundFlavorText(bg.label)}
                       </p>
                     )}
                   </div>
-                  {isSelected && <span className="text-arcane-light text-xl">✓</span>}
+                  {isSelected && <span className="text-arcane-light font-body text-xl">✓</span>}
                 </div>
               </button>
             );
@@ -101,40 +108,42 @@ export default function CharacterSetup({ room, player, onSubmit }: CharacterSetu
         </div>
       ) : (
         /* 선택 완료 - 대기 화면 */
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <div className="text-center">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 relative z-10">
+          <div className="eb-window text-center">
             <p className="text-5xl mb-3">
-              {BACKGROUNDS.find((b) => b.label === player.background)?.emoji ?? '🎮'}
+              {BACKGROUNDS.find((b) => b.label === player.background)?.emoji ?? '?'}
             </p>
-            <p className="text-white text-xl font-bold">{player.name}</p>
-            <p className="text-arcane-light">{player.background}</p>
-            <p className="text-slate-400 text-sm mt-1">특성: {player.trait}</p>
-            <p className="text-slate-400 text-sm">약점: {player.weakness}</p>
+            <p className="font-body text-white text-xl font-bold">{player.name}</p>
+            <p className="font-body text-arcane-light">{player.background}</p>
+            <p className="font-body text-slate-400 text-sm mt-1">특성: {player.trait}</p>
+            <p className="font-body text-slate-400 text-sm">약점: {player.weakness}</p>
           </div>
-          <p className="text-slate-500 text-sm animate-pulse">
+          <p className="font-body text-slate-500 text-sm animate-pulse">
             다른 플레이어를 기다리는 중...
           </p>
         </div>
       )}
 
       {/* 준비 현황 */}
-      <div className="flex gap-2 justify-center">
+      <div className="flex gap-2 justify-center relative z-10">
         {room.players.map((p) => (
           <div
             key={p.id}
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 ${
+            className={`eb-window !p-2 flex items-center justify-center text-sm font-bold ${
               p.background !== ''
-                ? 'bg-green-600/30 border-green-500 text-green-400'
-                : 'bg-midnight-700 border-midnight-600 text-slate-500'
+                ? '!border-tier-critical'
+                : '!border-slate-700'
             }`}
           >
-            {p.background !== ''
-              ? BACKGROUNDS.find((b) => b.label === p.background)?.emoji ?? '✓'
-              : p.name[0]}
+            <span className={p.background !== '' ? 'font-body text-tier-critical' : 'font-body text-slate-500'}>
+              {p.background !== ''
+                ? BACKGROUNDS.find((b) => b.label === p.background)?.emoji ?? '✓'
+                : p.name[0]}
+            </span>
           </div>
         ))}
       </div>
-      <p className="text-center text-slate-500 text-xs">
+      <p className="text-center font-body text-slate-500 text-xs relative z-10">
         {readyPlayers.length}/{room.players.length} 준비 완료
       </p>
 
@@ -143,9 +152,9 @@ export default function CharacterSetup({ room, player, onSubmit }: CharacterSetu
         <button
           onClick={handleSubmit}
           disabled={!name.trim() || !selectedBg}
-          className="w-full py-4 bg-arcane text-white font-bold text-lg rounded border-2 border-arcane-light active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100"
+          className="w-full eb-window !border-gold text-center active:scale-95 transition-transform disabled:opacity-40 disabled:active:scale-100 relative z-10"
         >
-          이걸로 간다
+          <span className="font-title text-base text-gold">이걸로 간다</span>
         </button>
       )}
     </div>

@@ -9,21 +9,27 @@ import DiceRoll from './DiceRoll';
 import RollResults from './RollResults';
 import NarrationBox from './NarrationBox';
 import WaveEndChoice from './WaveEndChoice';
+import MaintenanceScreen from './MaintenanceScreen';
 import SituationBox from './SituationBox';
 
 interface Props {
   onSubmitChoice: (choiceId: string) => void;
   onRoll: () => void;
   onVote: (decision: 'continue' | 'retreat') => void;
+  onEquipItem?: (itemId: string) => void;
+  onUnequipItem?: (itemId: string) => void;
+  onUseConsumable?: (itemId: string) => void;
+  onDiscardItem?: (itemId: string) => void;
 }
 
 /**
  * 전투 화면 — phase별 하위 컴포넌트 라우팅
  * 배경 레이어 + 적 스프라이트 + 파티 상태 + 이펙트 오버레이
  */
-export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) {
+export default function BattleScreen({ onSubmitChoice, onRoll, onVote, onEquipItem, onUnequipItem, onUseConsumable, onDiscardItem }: Props) {
   const phase = useGameStore((s) => s.phase);
   const currentWave = useGameStore((s) => s.currentWave);
+  const combatRound = useGameStore((s) => s.combatRound);
   const enemy = useGameStore((s) => s.enemy);
   const [activeEffect, setActiveEffect] = useState<EffectType>(null);
   const clearEffect = useCallback(() => setActiveEffect(null), []);
@@ -44,7 +50,7 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
     if (phase === 'rolling') {
       setActiveEffect('dice-glow');
     }
-    if (phase === 'wave_result' && enemy && enemy.hp <= 0) {
+    if ((phase === 'wave_result' || phase === 'maintenance') && enemy && enemy.hp <= 0) {
       setActiveEffect('victory-flash');
     }
     if (phase === 'run_end') {
@@ -88,13 +94,13 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
           </div>
         </div>
 
-        {/* 적 스프라이트 */}
-        {enemy && (
+        {/* 적 스프라이트 — hp > 0일 때만 */}
+        {enemy && enemy.hp > 0 && (
           <EnemySprite imageTag={enemy.imageTag} />
         )}
 
-        {/* 상황 묘사 (wave_intro, choosing) — 타이프라이터 효과 */}
-        {(phase === 'wave_intro' || phase === 'choosing') && <SituationBox />}
+        {/* 상황 묘사 (첫 라운드에서만, 이후 라운드는 선택지만) */}
+        {(phase === 'wave_intro' || (phase === 'choosing' && combatRound <= 1)) && <SituationBox />}
 
         {/* wave_intro: 로딩 표시 */}
         {phase === 'wave_intro' && (
@@ -123,9 +129,14 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote }: Props) 
           </>
         )}
 
-        {/* wave_result: 투표 */}
+        {/* wave_result: 전리품 표시 (3초) */}
         {phase === 'wave_result' && (
-          <WaveEndChoice onVote={onVote} />
+          <WaveEndChoice />
+        )}
+
+        {/* maintenance: 장비 관리 + 투표 */}
+        {phase === 'maintenance' && (
+          <MaintenanceScreen onVote={onVote} onEquipItem={onEquipItem} onUnequipItem={onUnequipItem} onUseConsumable={onUseConsumable} onDiscardItem={onDiscardItem} />
         )}
 
         {/* 파티 HP (하단) */}

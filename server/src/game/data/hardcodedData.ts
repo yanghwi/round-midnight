@@ -35,8 +35,8 @@ export const WAVE_TEMPLATES: WaveTemplate[] = [
       defense: 3,
       imageTag: 'raccoon',
     },
-    baseHp: 60,
-    baseAttack: 12,
+    baseHp: 45,
+    baseAttack: 8,
     situation: '야시장 뒷골목. 쓰레기통에서 뭔가 부스럭거린다. 갑자기 뚜껑이 날아가며 성난 너구리 가족이 튀어나온다! 아기 너구리 세 마리가 뒤에서 끽끽거린다.',
     choicesByBackground: {
       '전직 경비원': [
@@ -70,8 +70,8 @@ export const WAVE_TEMPLATES: WaveTemplate[] = [
       defense: 4,
       imageTag: 'vending-machine',
     },
-    baseHp: 80,
-    baseAttack: 15,
+    baseHp: 55,
+    baseAttack: 10,
     situation: '골목을 지나니 편의점 앞 자판기가 덜덜 떨고 있다. "음료... 사줘..." 기계음과 함께 자판기가 캔을 마구 발사하기 시작한다!',
     choicesByBackground: {
       '전직 경비원': [
@@ -105,8 +105,8 @@ export const WAVE_TEMPLATES: WaveTemplate[] = [
       defense: 5,
       imageTag: 'shadow-cats',
     },
-    baseHp: 90,
-    baseAttack: 18,
+    baseHp: 65,
+    baseAttack: 12,
     situation: '가로등이 깜빡이더니 꺼진다. 어둠 속에서 수십 개의 눈이 빛나기 시작한다. 그림자 고양이 떼가 사방에서 다가온다. 으르렁거리는 소리가 점점 커진다.',
     choicesByBackground: {
       '전직 경비원': [
@@ -140,8 +140,8 @@ export const WAVE_TEMPLATES: WaveTemplate[] = [
       defense: 6,
       imageTag: 'cleaning-robot',
     },
-    baseHp: 100,
-    baseAttack: 22,
+    baseHp: 75,
+    baseAttack: 15,
     situation: '지하도에 들어서자 "청소... 모드... 실행..." 하는 기계음이 울린다. 거대한 산업용 청소로봇이 빨간 눈을 켜고 돌진해온다. 회전 브러시에서 불꽃이 튄다!',
     choicesByBackground: {
       '전직 경비원': [
@@ -176,8 +176,8 @@ export const WAVE_TEMPLATES: WaveTemplate[] = [
       defense: 8,
       imageTag: 'market-boss',
     },
-    baseHp: 120,
-    baseAttack: 25,
+    baseHp: 95,
+    baseAttack: 18,
     situation: '야시장 중앙 광장. 모든 노점의 불이 동시에 꺼졌다가 보라색으로 켜진다. 거대한 고양이 탈을 쓴 존재가 천천히 나타난다. "어서 와. 오늘 밤의 마지막 손님이구나." 노점 포장마차들이 그의 손짓에 따라 움직이기 시작한다.',
     choicesByBackground: {
       '전직 경비원': [
@@ -280,16 +280,16 @@ export function buildNarrative(actions: import('@round-midnight/shared').PlayerA
 // ===== 전리품 테이블 =====
 
 export const LOOT_TABLE: LootItem[] = [
-  { name: '수상한 에너지 드링크', type: 'consumable', description: '마시면 기운이 솟는다', effect: 'HP 20 회복' },
-  { name: '녹슨 파이프', type: 'weapon', description: '꽤 묵직하다', effect: '물리 보정 +1' },
-  { name: '고양이 귀 후드', type: 'armor', description: '귀엽지만 의외로 튼튼하다', effect: '방어 보정 +1' },
-  { name: '깨진 스마트워치', type: 'accessory', description: '아직 블루투스는 된다', effect: '기술 행동 DC -1' },
-  { name: '야시장 쿠폰', type: 'consumable', description: '한 장 남은 할인 쿠폰', effect: '다음 웨이브 DC -2' },
-  { name: '형광 조끼', type: 'armor', description: '공사장에서 주운 것 같다', effect: '방어 보정 +2' },
-  { name: '고급 명함 케이스', type: 'accessory', description: '열면 자신감이 차오른다', effect: '사회 행동 DC -1' },
-  { name: '수제 핫도그', type: 'consumable', description: '아직 따뜻하다', effect: 'HP 15 회복' },
-  { name: '미스터리 캔', type: 'consumable', description: '라벨이 벗겨져 있다', effect: '랜덤 효과' },
-  { name: '번쩍이는 반지', type: 'accessory', description: '장난감 같지만 왠지 신비롭다', effect: '다음 굴림 최소 3 보장' },
+  { itemId: 'energy_drink', name: '수상한 에너지 드링크', type: 'consumable', rarity: 'common', description: '마시면 기운이 솟는다', effect: 'HP 15 회복' },
+  { itemId: 'rusty_pipe', name: '녹슨 파이프', type: 'weapon', rarity: 'common', description: '꽤 묵직하다', effect: '물리 보정 +1' },
+  { itemId: 'cardboard_armor', name: '골판지 갑옷', type: 'top', rarity: 'common', description: '누군가 정성 들여 만든 골판지 갑옷', effect: '방어 보정 +1' },
+  { itemId: 'pocket_calculator', name: '주머니 계산기', type: 'accessory', rarity: 'common', description: '빠른 계산은 생존의 기본', effect: '기술 행동 DC -1' },
+  { itemId: 'tteokbokki_cup', name: '컵 떡볶이', type: 'consumable', rarity: 'common', description: '매운맛이 정신을 차리게 한다', effect: 'HP 20 회복' },
+  { itemId: 'construction_vest', name: '안전 조끼', type: 'top', rarity: 'uncommon', description: '반사 스트라이프가 어둠 속에서 빛난다', effect: '방어 보정 +2' },
+  { itemId: 'friendship_bracelet', name: '우정 팔찌', type: 'accessory', rarity: 'common', description: '친구가 만들어준 팔찌', effect: '사회 행동 DC -1' },
+  { itemId: 'hotdog_fresh', name: '수제 핫도그', type: 'consumable', rarity: 'common', description: '아직 따뜻하다', effect: 'HP 15 회복' },
+  { itemId: 'mystery_can', name: '미스터리 캔', type: 'consumable', rarity: 'common', description: '라벨이 벗겨져 있다', effect: 'HP 25 회복' },
+  { itemId: 'rabbit_foot_keychain', name: '토끼발 열쇠고리', type: 'accessory', rarity: 'common', description: '행운의 상징', effect: '주사위 리롤 1회' },
 ];
 
 // ===== 다음 웨이브 미리보기 =====

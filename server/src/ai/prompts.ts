@@ -1,4 +1,5 @@
 import type { Character, PlayerAction } from '@round-midnight/shared';
+import { getItemById } from '../game/data/items/index.js';
 
 // ===== 시스템 프롬프트 =====
 
@@ -14,7 +15,7 @@ export const SITUATION_SYSTEM = `너는 EarthBound/Mother 시리즈의 톤을 �
   "enemy": {
     "name": "string",
     "description": "string (1줄)",
-    "imageTag": "string (영문 kebab-case)"
+    "imageTag": "raccoon | vending-machine | shadow-cats | cleaning-robot | market-boss 중 가장 가까운 것"
   },
   "playerChoices": [
     {
@@ -67,14 +68,44 @@ export const HIGHLIGHTS_SYSTEM = `너는 EarthBound 톤의 게임 마스터다.
   "highlights": ["string", "string", "string"]
 }`;
 
+export const COMBAT_CHOICES_SYSTEM = `너는 EarthBound/Mother 시리즈의 톤을 가진 게임 마스터다.
+진행 중인 전투의 다음 라운드 선택지를 생성한다.
+이전 라운드와 다른 새로운 선택지를 제공하라.
+
+반드시 JSON으로만 응답하라. 마크다운 코드블록 없이 순수 JSON만 출력하라.
+
+출력 JSON 스키마:
+{
+  "playerChoices": [
+    {
+      "playerId": "string",
+      "options": [
+        { "id": "string", "text": "string", "category": "physical|social|technical|defensive|creative", "baseDC": 8~18 }
+      ]
+    }
+  ]
+}
+
+규칙:
+- 각 플레이어의 선택지는 반드시 해당 캐릭터의 background, trait를 반영할 것
+- 선택지 개수는 2~3개
+- 이전 라운드에서 사용한 선택지와 다른 새로운 접근을 제시할 것
+- 적의 현재 HP 비율에 따라 선택지 톤을 조정하라 (HP 낮으면 마무리 공격 등)`;
+
 // ===== 유저 메시지 빌더 =====
 
 function formatParty(players: Character[]): string {
   return players
-    .map(
-      (p) =>
-        `- ${p.name} (${p.background}, 특성: ${p.trait}, 약점: ${p.weakness}, HP: ${p.hp}/${p.maxHp})`,
-    )
+    .map((p) => {
+      const equippedNames: string[] = [];
+      for (const id of [p.equipment.weaponItemId, p.equipment.topItemId, p.equipment.bottomItemId, p.equipment.hatItemId, p.equipment.accessoryItemId]) {
+        if (!id) continue;
+        const item = getItemById(id);
+        if (item) equippedNames.push(item.name);
+      }
+      const equipStr = equippedNames.length > 0 ? `, 장비: [${equippedNames.join(', ')}]` : '';
+      return `- ${p.name} (${p.background}, 특성: ${p.trait}, 약점: ${p.weakness}, HP: ${p.hp}/${p.maxHp}${equipStr})`;
+    })
     .join('\n');
 }
 
@@ -114,11 +145,31 @@ export function buildNarrativeMessage(
   return `상황: ${situation}\n적: ${enemyName}\n\n행동 결과:\n${actionLines}`;
 }
 
+export function buildCombatChoicesMessage(
+  situation: string,
+  enemyName: string,
+  enemyHp: number,
+  enemyMaxHp: number,
+  combatRound: number,
+  players: Character[],
+  previousActions?: PlayerAction[],
+): string {
+  const hpRatio = enemyMaxHp > 0 ? Math.round((enemyHp / enemyMaxHp) * 100) : 0;
+  let msg = `상황: ${situation}\n적: ${enemyName} (HP: ${hpRatio}%)\n전투 라운드: ${combatRound}\n\n파티:\n${formatParty(players)}`;
+  if (previousActions && previousActions.length > 0) {
+    const prevLines = previousActions
+      .map((a) => `- ${a.playerName}: "${a.choiceText}" (${TIER_LABELS[a.tier] ?? a.tier})`)
+      .join('\n');
+    msg += `\n\n이전 라운드 행동 (같은 선택지를 반복하지 마라):\n${prevLines}`;
+  }
+  return msg;
+}
+
 export function buildHighlightsMessage(
   result: 'retreat' | 'wipe' | 'clear',
   players: Character[],
   waveCount: number,
 ): string {
-  const resultLabel = result === 'clear' ? '클리어' : result === 'retreat' ? '철수' : '전멸';
+  const resultLabel = result === 'clear' ? '클리어' : result === 'retreat' ? '후퇴' : '전멸';
   return `결과: ${resultLabel}\n파티: ${players.map((p) => p.name).join(', ')}\n진행 웨이브: ${waveCount}`;
 }

@@ -1,29 +1,40 @@
 import { useGameStore } from '../../stores/gameStore';
+import type { LootItem, ItemRarity } from '@round-midnight/shared';
 
-interface Props {
-  onVote: (decision: 'continue' | 'retreat') => void;
-}
+const RARITY_COLORS: Record<ItemRarity, string> = {
+  common: 'text-slate-400',
+  uncommon: 'text-green-400',
+  rare: 'text-blue-400',
+  legendary: 'text-gold',
+};
+
+const RARITY_BORDERS: Record<ItemRarity, string> = {
+  common: 'border-slate-600',
+  uncommon: 'border-green-700',
+  rare: 'border-blue-700',
+  legendary: 'border-gold',
+};
+
+const RARITY_LABELS: Record<ItemRarity, string> = {
+  common: '일반',
+  uncommon: '고급',
+  rare: '희귀',
+  legendary: '전설',
+};
 
 /**
- * 웨이브 종료 — 전리품 표시 + 계속/철수 투표
+ * 웨이브 종료 — 전리품 표시만 (3초간, 이후 maintenance로 전환)
  */
-export default function WaveEndChoice({ onVote }: Props) {
-  const canContinue = useGameStore((s) => s.canContinue);
+export default function WaveEndChoice() {
   const loot = useGameStore((s) => s.loot);
-  const hasVoted = useGameStore((s) => s.hasVoted);
-  const setHasVoted = useGameStore((s) => s.setHasVoted);
-  const nextWavePreview = useGameStore((s) => s.nextWavePreview);
+  const player = useGameStore((s) => s.player);
   const partyStatus = useGameStore((s) => s.partyStatus);
-  const voteStatus = useGameStore((s) => s.voteStatus);
 
-  const handleVote = (decision: 'continue' | 'retreat') => {
-    if (hasVoted) return;
-    setHasVoted(true);
-    onVote(decision);
-  };
+  const myLoot = loot.filter((l) => !l.assignedTo || l.assignedTo === player?.name);
+  const otherLoot = loot.filter((l) => l.assignedTo && l.assignedTo !== player?.name);
 
   return (
-    <div className="flex-1 flex flex-col justify-end px-3 pb-4 gap-3">
+    <div className="flex-1 flex flex-col justify-end px-3 pb-4 gap-3 overflow-y-auto">
       {/* 파티 상태 요약 */}
       <div className="eb-window">
         <div className="font-title text-sm text-gold mb-2">파티 상태</div>
@@ -41,66 +52,60 @@ export default function WaveEndChoice({ onVote }: Props) {
         </div>
       </div>
 
-      {/* 전리품 */}
-      {loot.length > 0 && (
+      {/* 나의 전리품 */}
+      {myLoot.length > 0 && (
         <div className="eb-window !border-gold animate-fade-in">
-          <div className="font-title text-sm text-gold mb-1">전리품!</div>
-          {loot.map((item, i) => (
-            <div key={i} className="font-body text-sm text-slate-200">
-              {item.name} — <span className="text-slate-400">{item.effect}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 다음 웨이브 미리보기 */}
-      {nextWavePreview && canContinue && (
-        <div className="font-body text-sm text-slate-500 text-center italic">
-          {nextWavePreview}
-        </div>
-      )}
-
-      {/* 투표 버튼 */}
-      {!hasVoted ? (
-        <div className="flex gap-2">
-          {canContinue ? (
-            <>
-              <button
-                onClick={() => handleVote('continue')}
-                className="flex-1 eb-window !border-tier-critical text-center active:scale-[0.97] transition-transform"
-              >
-                <div className="font-title text-base text-tier-critical">계속 전진</div>
-                <div className="font-body text-sm text-slate-500">다음 웨이브로</div>
-              </button>
-              <button
-                onClick={() => handleVote('retreat')}
-                className="flex-1 eb-window !border-tier-fail text-center active:scale-[0.97] transition-transform"
-              >
-                <div className="font-title text-base text-tier-fail">철수</div>
-                <div className="font-body text-sm text-slate-500">전리품 챙기고 나가기</div>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => handleVote('continue')}
-              className="w-full eb-window !border-gold text-center active:scale-[0.97] transition-transform"
-            >
-              <div className="font-title text-base text-gold">계속 전투</div>
-              <div className="font-body text-sm text-slate-500">같은 적과 재도전</div>
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="text-center space-y-1">
-          <div className="font-body text-sm text-slate-400 animate-pulse">
-            투표 완료! 결과를 기다리는 중...
+          <div className="font-title text-sm text-gold mb-2">전리품 획득!</div>
+          <div className="space-y-2">
+            {myLoot.map((item, i) => (
+              <LootCard key={i} item={item} />
+            ))}
           </div>
-          {voteStatus && (
-            <div className="font-body text-sm text-slate-500">
-              전진 {voteStatus.continueCount} / 철수 {voteStatus.retreatCount} ({voteStatus.total}명 중 {voteStatus.continueCount + voteStatus.retreatCount}명 투표)
-            </div>
-          )}
         </div>
+      )}
+
+      {/* 동료의 전리품 */}
+      {otherLoot.length > 0 && (
+        <div className="eb-window animate-fade-in">
+          <div className="font-title text-sm text-slate-400 mb-2">동료의 전리품</div>
+          <div className="space-y-1">
+            {otherLoot.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 font-body text-xs text-slate-500">
+                <span className={RARITY_COLORS[item.rarity]}>{item.name}</span>
+                <span className="text-slate-600">→ {item.assignedTo}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 정비 전환 안내 */}
+      <div className="text-center">
+        <div className="font-body text-sm text-slate-400 animate-pulse">
+          정비 시간으로 이동 중...
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LootCard({ item }: { item: LootItem }) {
+  const rarity = item.rarity ?? 'common';
+  const colorClass = RARITY_COLORS[rarity];
+  const borderClass = RARITY_BORDERS[rarity];
+  const label = RARITY_LABELS[rarity];
+
+  return (
+    <div className={`flex items-center gap-2 p-2 rounded border ${borderClass} bg-midnight-800/50`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`font-body text-sm font-bold ${colorClass}`}>{item.name}</span>
+          <span className={`font-body text-xs ${colorClass} opacity-70`}>[{label}]</span>
+        </div>
+        <div className="font-body text-xs text-slate-500 truncate">{item.effect}</div>
+      </div>
+      {item.inventoryFull && (
+        <span className="font-body text-xs text-tier-nat1 shrink-0">가방 풀!</span>
       )}
     </div>
   );

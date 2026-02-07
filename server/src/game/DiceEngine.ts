@@ -1,4 +1,5 @@
 import type { Character, ActionCategory, RollTier } from '@round-midnight/shared';
+import type { ResolvedEffects } from './ItemEffectResolver.js';
 
 /**
  * d20 주사위 굴림 (1~20)
@@ -21,7 +22,11 @@ export function rollDice(): number {
  *   weaponBonus → physical 카테고리
  *   armorBonus  → defensive 카테고리
  */
-export function calculateBonus(character: Character, category: ActionCategory): number {
+export function calculateBonus(
+  character: Character,
+  category: ActionCategory,
+  resolved?: ResolvedEffects,
+): number {
   const BACKGROUND_CATEGORIES: Record<string, ActionCategory[]> = {
     '전직 경비원': ['physical', 'defensive'],
     '요리사': ['creative'],
@@ -32,9 +37,11 @@ export function calculateBonus(character: Character, category: ActionCategory): 
   const strongCategories = BACKGROUND_CATEGORIES[character.background] ?? [];
   const backgroundBonus = strongCategories.includes(category) ? 2 : 0;
 
+  const weaponB = resolved ? resolved.weaponBonus : character.equipment.weaponBonus;
+  const armorB = resolved ? resolved.armorBonus : character.equipment.armorBonus;
   let equipmentBonus = 0;
-  if (category === 'physical') equipmentBonus += character.equipment.weaponBonus;
-  if (category === 'defensive') equipmentBonus += character.equipment.armorBonus;
+  if (category === 'physical') equipmentBonus += weaponB;
+  if (category === 'defensive') equipmentBonus += armorB;
 
   return backgroundBonus + equipmentBonus;
 }
