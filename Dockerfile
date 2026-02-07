@@ -36,9 +36,13 @@ RUN npm ci --omit=dev
 COPY server/prisma/ ./server/prisma/
 RUN cd server && npx prisma generate
 
-# 빌드 결과물과 shared 소스 복사
-COPY shared/ ./shared/
+# 빌드 결과물 복사
 COPY --from=builder /app/server/dist ./server/dist
+# shared: 컴파일된 JS를 사용 (Node.js는 .ts를 직접 실행 불가)
+COPY --from=builder /app/server/dist/shared/ ./shared/
+# shared/package.json의 main을 .js로 변경
+RUN sed -i 's/"main": "types.ts"/"main": "types.js"/' shared/package.json && \
+    sed -i 's|"./types.ts"|"./types.js"|' shared/package.json
 
 EXPOSE 3000
 
