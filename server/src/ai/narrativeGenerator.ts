@@ -17,7 +17,7 @@ export async function generateNarrative(
   enemyDefeated: boolean,
 ): Promise<string> {
   const userMessage = buildNarrativeMessage(situation, enemyName, actions);
-  const llmResult = await callClaude<LLMNarrativeResponse>(NARRATIVE_SYSTEM, userMessage);
+  const llmResult = await callClaude<LLMNarrativeResponse>(NARRATIVE_SYSTEM, userMessage, 150);
 
   if (llmResult?.narrative) {
     // 적 처치 여부를 내러티브 끝에 반영
