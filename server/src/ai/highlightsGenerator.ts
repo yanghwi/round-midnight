@@ -21,7 +21,7 @@ export async function generateHighlights(
   waveCount: number,
 ): Promise<string[]> {
   const userMessage = buildHighlightsMessage(result, players, waveCount);
-  const llmResult = await callClaude<LLMHighlightsResponse>(HIGHLIGHTS_SYSTEM, userMessage);
+  const llmResult = await callClaude<LLMHighlightsResponse>(HIGHLIGHTS_SYSTEM, userMessage, 150);
 
   if (llmResult?.highlights && Array.isArray(llmResult.highlights) && llmResult.highlights.length >= 3) {
     console.log('[AI] 하이라이트 생성 성공 (LLM)');
