@@ -67,6 +67,10 @@ body {
   flex-direction: column;
 }
 
+input, select, textarea {
+  font-size: 16px; /* iOS Safari 자동 줌 방지 */
+}
+
 /* 스크롤바 숨기기 (모바일 게임 UI) */
 ::-webkit-scrollbar {
   display: none;
@@ -78,6 +82,11 @@ body {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }
 
 /* ===== EarthBound UI 윈도우 ===== */

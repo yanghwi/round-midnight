@@ -40,7 +40,7 @@ export default function SituationBox() {
 
   return (
     <div className="px-3 mt-2" onClick={handleTap}>
-      <div className="eb-window">
+      <div className="eb-window max-h-[30vh] overflow-y-auto">
         <pre className="font-body text-base text-slate-200 whitespace-pre-wrap leading-relaxed">
           {displayedText}
           {!isComplete && <span className="animate-pulse">|</span>}

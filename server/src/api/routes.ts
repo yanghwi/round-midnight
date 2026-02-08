@@ -119,8 +119,12 @@ router.get('/me', authMiddleware, async (req, res) => {
 
     let totalXp = 0;
     for (const p of participations) {
-      totalXp += (p.run.wavesCleared ?? 0) * 10;
-      if (p.run.result === 'clear') totalXp += 50;
+      const wavesCleared = p.run.wavesCleared ?? 0;
+      totalXp += 15;                                    // 참가 기본
+      totalXp += wavesCleared * 25;                     // 웨이브당
+      if (wavesCleared >= 5) totalXp += 15;             // 보스 보너스
+      if (wavesCleared >= 10) totalXp += 15;            // 최종보스 보너스
+      if (p.run.result === 'clear') totalXp += 50;      // 클리어 보너스
     }
 
     const level = Math.floor(Math.sqrt(totalXp / 50)) + 1;

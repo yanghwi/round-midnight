@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { RoomMode, InventoryItemDisplay, ItemRarity } from '@round-midnight/shared';
+import type { RoomMode } from '@round-midnight/shared';
 import { useGameStore } from '../../stores/gameStore';
 import type { CharacterConfig } from '../../stores/gameStore';
 import { BACKGROUNDS } from '../../styles/theme';
@@ -11,22 +11,6 @@ import {
 import { apiGetRuns, apiGetDailyToday, apiGetProfile } from '../../hooks/useApi';
 import LobbyBg from '../Lobby/LobbyBg';
 import CharacterCreator from '../Lobby/CharacterCreator';
-
-const RARITY_COLORS: Record<ItemRarity, string> = {
-  common: 'text-slate-400',
-  uncommon: 'text-green-400',
-  rare: 'text-blue-400',
-  legendary: 'text-gold',
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  weapon: '무기',
-  top: '상의',
-  bottom: '하의',
-  hat: '모자',
-  accessory: '악세서리',
-  consumable: '소모품',
-};
 
 interface CharacterHubProps {
   onCreateRoom: (name: string, roomMode?: RoomMode, dailySeedId?: string, seed?: string) => void;
@@ -41,10 +25,8 @@ export default function CharacterHub({ onCreateRoom, onJoinRoom }: CharacterHubP
   const setPendingAction = useGameStore((s) => s.setPendingAction);
   const runHistory = useGameStore((s) => s.runHistory);
   const setRunHistory = useGameStore((s) => s.setRunHistory);
-  const inventory = useGameStore((s) => s.inventory);
-  const equipment = useGameStore((s) => s.equipment);
 
-  const [activePanel, setActivePanel] = useState<'none' | 'appearance' | 'equipment' | 'inventory' | 'background'>('none');
+  const [activePanel, setActivePanel] = useState<'none' | 'appearance' | 'stats' | 'guide' | 'background'>('none');
   const [showJoinInput, setShowJoinInput] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -125,7 +107,7 @@ export default function CharacterHub({ onCreateRoom, onJoinRoom }: CharacterHubP
   if (!authUser || !characterConfig) return null;
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-5 gap-4 relative min-h-dvh">
+    <div className="flex-1 flex flex-col px-6 py-5 gap-4 relative h-dvh overflow-y-auto">
       <LobbyBg />
 
       {/* 상단 바 */}
@@ -235,21 +217,19 @@ export default function CharacterHub({ onCreateRoom, onJoinRoom }: CharacterHubP
         </div>
       )}
 
-      {activePanel === 'equipment' && (
+      {activePanel === 'stats' && (
         <div className="relative z-10 animate-fade-in">
-          <EquipmentPanel
-            inventory={inventory}
+          <StatsPanel
+            authUser={authUser}
+            totalRuns={authUser.totalRuns ?? 0}
             onClose={() => setActivePanel('none')}
           />
         </div>
       )}
 
-      {activePanel === 'inventory' && (
+      {activePanel === 'guide' && (
         <div className="relative z-10 animate-fade-in">
-          <InventoryPanel
-            inventory={inventory}
-            onClose={() => setActivePanel('none')}
-          />
+          <GuidePanel onClose={() => setActivePanel('none')} />
         </div>
       )}
 
@@ -270,16 +250,16 @@ export default function CharacterHub({ onCreateRoom, onJoinRoom }: CharacterHubP
               <span className="font-title text-xs text-slate-300">배경</span>
             </button>
             <button
-              onClick={() => setActivePanel('equipment')}
+              onClick={() => setActivePanel('stats')}
               className="flex-1 eb-window !border-slate-500 text-center active:scale-95 transition-transform"
             >
-              <span className="font-title text-xs text-slate-300">장비</span>
+              <span className="font-title text-xs text-slate-300">통계</span>
             </button>
             <button
-              onClick={() => setActivePanel('inventory')}
+              onClick={() => setActivePanel('guide')}
               className="flex-1 eb-window !border-slate-500 text-center active:scale-95 transition-transform"
             >
-              <span className="font-title text-xs text-slate-300">인벤토리</span>
+              <span className="font-title text-xs text-slate-300">안내</span>
             </button>
           </div>
 
@@ -363,72 +343,57 @@ export default function CharacterHub({ onCreateRoom, onJoinRoom }: CharacterHubP
   );
 }
 
-// ─── 장비 패널 ───
+// ─── 통계 패널 ───
 
-function EquipmentPanel({
-  inventory,
+function StatsPanel({
+  authUser,
+  totalRuns,
   onClose,
 }: {
-  inventory: InventoryItemDisplay[];
+  authUser: { level?: number; xp?: number; xpToNext?: number };
+  totalRuns: number;
   onClose: () => void;
 }) {
-  const equippedItems = inventory.filter((i) => i.equipped);
-
   return (
     <div className="eb-window">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-title text-sm text-arcane-light">장착 장비</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-title text-sm text-arcane-light">통계</span>
         <button onClick={onClose} className="font-body text-xs text-slate-400">닫기</button>
       </div>
-      {equippedItems.length === 0 ? (
-        <p className="font-body text-sm text-slate-500 text-center py-4">
-          장착된 장비가 없습니다. 던전에서 전리품을 획득하세요!
-        </p>
-      ) : (
-        <div className="space-y-1">
-          {equippedItems.map((item, i) => (
-            <div key={`eq-${i}`} className="flex items-center gap-2 font-body text-xs">
-              <span className="text-slate-500">[{TYPE_LABELS[item.type]}]</span>
-              <span className={RARITY_COLORS[item.rarity]}>{item.name}</span>
-            </div>
-          ))}
+      <div className="space-y-2">
+        <div className="flex justify-between font-body text-sm">
+          <span className="text-slate-400">레벨</span>
+          <span className="text-white">{authUser.level ?? 1}</span>
         </div>
-      )}
+        <div className="flex justify-between font-body text-sm">
+          <span className="text-slate-400">XP</span>
+          <span className="text-arcane-light">{authUser.xp ?? 0} / {authUser.xpToNext ?? 50}</span>
+        </div>
+        <div className="flex justify-between font-body text-sm">
+          <span className="text-slate-400">총 런 수</span>
+          <span className="text-white">{totalRuns}</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ─── 인벤토리 패널 ───
+// ─── 안내 패널 ───
 
-function InventoryPanel({
-  inventory,
-  onClose,
-}: {
-  inventory: InventoryItemDisplay[];
-  onClose: () => void;
-}) {
-  const unequippedItems = inventory.filter((i) => !i.equipped);
-
+function GuidePanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="eb-window">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-title text-sm text-arcane-light">인벤토리</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-title text-sm text-arcane-light">안내</span>
         <button onClick={onClose} className="font-body text-xs text-slate-400">닫기</button>
       </div>
-      {unequippedItems.length === 0 ? (
-        <p className="font-body text-sm text-slate-500 text-center py-4">
-          인벤토리가 비어 있습니다. 던전에서 아이템을 발견하세요!
+      <div className="space-y-2 font-body text-sm text-slate-300 leading-relaxed">
+        <p>던전에서 적을 처치하면 전리품을 획득합니다.</p>
+        <p>장비는 정비 시간에 장착/해제할 수 있습니다.</p>
+        <p className="text-slate-500 text-xs">
+          * 로그라이트: 매 런마다 장비가 리셋됩니다.
         </p>
-      ) : (
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {unequippedItems.map((item, i) => (
-            <div key={`inv-${i}`} className="flex items-center gap-2 font-body text-xs">
-              <span className="text-slate-600">[{TYPE_LABELS[item.type]}]</span>
-              <span className={`${RARITY_COLORS[item.rarity]} opacity-70`}>{item.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

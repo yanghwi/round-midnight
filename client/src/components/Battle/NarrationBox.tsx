@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 
 /**
@@ -11,6 +11,7 @@ export default function NarrationBox() {
 
   const [displayedText, setDisplayedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // 타이프라이터 효과
   useEffect(() => {
@@ -33,6 +34,13 @@ export default function NarrationBox() {
     return () => clearInterval(interval);
   }, [narrative]);
 
+  // 타이프라이터 진행 시 자동 스크롤
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [displayedText]);
+
   // 탭하면 스킵
   const handleTap = useCallback(() => {
     if (!isComplete && narrative) {
@@ -44,9 +52,9 @@ export default function NarrationBox() {
   if (!narrative) return null;
 
   return (
-    <div className="flex-1 flex flex-col justify-center px-3" onClick={handleTap}>
+    <div className="px-3 py-2" onClick={handleTap}>
       {/* 내러티브 텍스트 */}
-      <div className="eb-window">
+      <div ref={scrollRef} className="eb-window max-h-[40vh] overflow-y-auto">
         <pre className="font-body text-base text-slate-200 whitespace-pre-wrap leading-relaxed">
           {displayedText}
           {!isComplete && <span className="animate-pulse">|</span>}

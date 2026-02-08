@@ -56,10 +56,9 @@ export function useSocket() {
       console.log('Connected to server');
       setConnected(true);
 
-      // 재접속 시도: 이전 세션이 있으면 playerId로 복원 시도
+      // 재접속 시도: savedPlayerId가 있으면 항상 시도 (서버에 방이 없으면 RECONNECT_FAILED 반환)
       const savedPlayerId = localStorage.getItem('rm-player-id');
-      const store = useGameStore.getState();
-      if (savedPlayerId && store.phase !== 'waiting') {
+      if (savedPlayerId) {
         socket.emit(SOCKET_EVENTS.RECONNECT_ATTEMPT, { playerId: savedPlayerId });
       }
     });

@@ -62,91 +62,98 @@ export default function BattleScreen({ onSubmitChoice, onRoll, onVote, onEquipIt
   const isFinalBoss = currentWave >= 10;
 
   return (
-    <div className="flex-1 flex flex-col relative min-h-dvh">
+    <div className="flex-1 flex flex-col relative h-dvh overflow-hidden">
       <BattleBg waveNumber={currentWave} />
 
-      {/* 컨텐츠 레이어 */}
-      <div className="relative flex-1 flex flex-col z-[1]">
-        {/* 웨이브 번호 + 적 HP 바 */}
-        <div className="px-3 pt-3">
-          <div className="flex flex-col items-center gap-1">
-            <span className={`font-title text-xs ${isBossWave ? 'text-tier-nat20 animate-pulse' : 'text-arcane-light'}`}>
-              {isBossWave && (isFinalBoss ? 'FINAL BOSS - ' : 'BOSS - ')}
-              WAVE {currentWave}
-            </span>
-            {enemy && (() => {
-              const ratio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
-              const barColor =
-                ratio > 0.5 ? 'bg-tier-critical' :
-                ratio > 0.25 ? 'bg-gold' :
-                'bg-tier-nat1';
-              return (
-                <div className={`w-48 eb-window !px-2 !py-1.5 ${isBossWave ? 'border-tier-nat20' : ''}`}>
-                  <div className="font-title text-sm text-slate-200 text-center mb-1 truncate">
-                    {enemy.name}
+      {/* 컨텐츠 레이어 — 3구간: TOP(shrink-0) + MIDDLE(flex-1 스크롤) + BOTTOM(shrink-0) */}
+      <div className="relative flex-1 flex flex-col z-[1] min-h-0">
+        {/* TOP: 웨이브 정보 + 적 스프라이트 (shrink-0) */}
+        <div className="shrink-0">
+          <div className="px-3 pt-3">
+            <div className="flex flex-col items-center gap-1">
+              <span className={`font-title text-xs ${isBossWave ? 'text-tier-nat20 animate-pulse' : 'text-arcane-light'}`}>
+                {isBossWave && (isFinalBoss ? 'FINAL BOSS - ' : 'BOSS - ')}
+                WAVE {currentWave}
+              </span>
+              {enemy && (() => {
+                const ratio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
+                const barColor =
+                  ratio > 0.5 ? 'bg-tier-critical' :
+                  ratio > 0.25 ? 'bg-gold' :
+                  'bg-tier-nat1';
+                return (
+                  <div className={`w-48 eb-window !px-2 !py-1.5 ${isBossWave ? 'border-tier-nat20' : ''}`}>
+                    <div className="font-title text-sm text-slate-200 text-center mb-1 truncate">
+                      {enemy.name}
+                    </div>
+                    <div className="h-2.5 bg-midnight-900 border border-slate-600 rounded-sm overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ease-out ${barColor}`}
+                        style={{ width: `${Math.max(0, ratio * 100)}%` }}
+                      />
+                    </div>
+                    <div className="font-body text-sm text-slate-400 mt-0.5 text-center">
+                      {enemy.hp}/{enemy.maxHp}
+                    </div>
                   </div>
-                  <div className="h-2.5 bg-midnight-900 border border-slate-600 rounded-sm overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ease-out ${barColor}`}
-                      style={{ width: `${Math.max(0, ratio * 100)}%` }}
-                    />
-                  </div>
-                  <div className="font-body text-sm text-slate-400 mt-0.5 text-center">
-                    {enemy.hp}/{enemy.maxHp}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* 적 스프라이트 — hp > 0일 때만 */}
-        {enemy && enemy.hp > 0 && (
-          <EnemySprite imageTag={enemy.imageTag} isBoss={isBossWave} />
-        )}
-
-        {/* 상황 묘사 (첫 라운드에서만, 이후 라운드는 선택지만) */}
-        {(phase === 'wave_intro' || (phase === 'choosing' && combatRound <= 1)) && <SituationBox />}
-
-        {/* wave_intro: 로딩 표시 */}
-        {phase === 'wave_intro' && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="font-body text-sm text-slate-400 animate-pulse">
-              상황 파악 중...
+                );
+              })()}
             </div>
           </div>
-        )}
 
-        {/* choosing: 선택지 */}
-        {phase === 'choosing' && (
-          <ChoiceCards onSubmitChoice={onSubmitChoice} />
-        )}
+          {/* 적 스프라이트 — hp > 0일 때만 */}
+          {enemy && enemy.hp > 0 && (
+            <EnemySprite imageTag={enemy.imageTag} isBoss={isBossWave} />
+          )}
+        </div>
 
-        {/* rolling: 주사위 */}
-        {phase === 'rolling' && (
-          <DiceRoll onRoll={onRoll} />
-        )}
+        {/* MIDDLE: phase별 콘텐츠 (flex-1, 스크롤) */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* 상황 묘사 (첫 라운드에서만, 이후 라운드는 선택지만) */}
+          {(phase === 'wave_intro' || (phase === 'choosing' && combatRound <= 1)) && <SituationBox />}
 
-        {/* narrating: 결과 + 내러티브 */}
-        {phase === 'narrating' && (
-          <>
-            <RollResults />
-            <NarrationBox />
-          </>
-        )}
+          {/* wave_intro: 로딩 표시 */}
+          {phase === 'wave_intro' && (
+            <div className="flex items-center justify-center py-8">
+              <div className="font-body text-sm text-slate-400 animate-pulse">
+                상황 파악 중...
+              </div>
+            </div>
+          )}
 
-        {/* wave_result: 전리품 표시 (3초) */}
-        {phase === 'wave_result' && (
-          <WaveEndChoice />
-        )}
+          {/* choosing: 선택지 */}
+          {phase === 'choosing' && (
+            <ChoiceCards onSubmitChoice={onSubmitChoice} />
+          )}
 
-        {/* maintenance: 장비 관리 + 투표 */}
-        {phase === 'maintenance' && (
-          <MaintenanceScreen onVote={onVote} onEquipItem={onEquipItem} onUnequipItem={onUnequipItem} onUseConsumable={onUseConsumable} onDiscardItem={onDiscardItem} />
-        )}
+          {/* rolling: 주사위 */}
+          {phase === 'rolling' && (
+            <DiceRoll onRoll={onRoll} />
+          )}
 
-        {/* 파티 HP (하단) */}
-        <PartyStatus />
+          {/* narrating: 결과 + 내러티브 */}
+          {phase === 'narrating' && (
+            <>
+              <RollResults />
+              <NarrationBox />
+            </>
+          )}
+
+          {/* wave_result: 전리품 표시 (3초) */}
+          {phase === 'wave_result' && (
+            <WaveEndChoice />
+          )}
+
+          {/* maintenance: 장비 관리 + 투표 */}
+          {phase === 'maintenance' && (
+            <MaintenanceScreen onVote={onVote} onEquipItem={onEquipItem} onUnequipItem={onUnequipItem} onUseConsumable={onUseConsumable} onDiscardItem={onDiscardItem} />
+          )}
+        </div>
+
+        {/* BOTTOM: 파티 HP (shrink-0) */}
+        <div className="shrink-0">
+          <PartyStatus />
+        </div>
       </div>
 
       {/* 이펙트 오버레이 */}

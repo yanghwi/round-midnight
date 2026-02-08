@@ -82,7 +82,7 @@ export default function ChoiceCards({ onSubmitChoice }: Props) {
               <span className="font-title text-xs text-arcane-light bg-midnight-900 px-1.5 py-0.5 rounded">
                 {categoryIcon[option.category] ?? '???'}
               </span>
-              <span className="font-body text-base text-slate-100 leading-snug">
+              <span className="font-body text-base text-slate-100 leading-snug line-clamp-3">
                 {option.text}
               </span>
             </div>
